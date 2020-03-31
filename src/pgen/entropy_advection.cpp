@@ -44,17 +44,22 @@ Real gm1,gem1,ge,g;
 
 void Mesh::InitUserMeshData(ParameterInput *pin) {
 
-    gm1 = peos->GetGamma() - 1.0;
-    g = gm1+1.0;
-    ge = 4.0/3.0;
-    gem1 = ge-1.0
     EnrollUserExplicitSourceFunction(electron_update);
 
 
   return;
 }
 
+void MeshBlock::InitUserMeshBlockData(ParameterInput *pin) {
 
+    gm1 = peos->GetGamma() - 1.0;
+    g = gm1+1.0;
+    ge = 4.0/3.0;
+    gem1 = ge-1.0;
+
+
+  return;
+}
 
 //========================================================================================
 //! \fn void MeshBlock::ProblemGenerator(ParameterInput *pin)
@@ -87,7 +92,7 @@ void MeshBlock::ProblemGenerator(ParameterInput *pin) {
         phydro->u(IM2,k,j,i) = 0.0;
         phydro->u(IM3,k,j,i) = 0.0;
         // assuming isothermal EOS:
-        phydro->u(IEN,k,j,i) = rho * SQR(v0)/2.0 + p0/gm1; 
+        phydro->u(IEN,k,j,i) = d0 * SQR(v0)/2.0 + p0/gm1; 
 
         // set entropy
         if (NSCALARS > 0) pscalars->s(0,k,j,i) = p0/std::pow(d0,g); //total
@@ -117,9 +122,9 @@ void electron_update(MeshBlock *pmb,const Real time, const Real dt,const AthenaA
       for (int i=pmb->is; i<=pmb->ie; ++i) {
 ;
         Real dh = prim(IDN,k,j,i);
-        pnew = prim(IPR,k,j,i);
-        dnew = prim(IDN,k,j,i)
-        r_actual = pnew/std::pow(dnew,gm1+1);
+        Real pnew = prim(IPR,k,j,i);
+        Real dnew = prim(IDN,k,j,i);
+        Real r_actual = pnew/std::pow(dnew,gm1+1);
 
         Real s_actual = dnew * r_actual;
 
@@ -127,7 +132,7 @@ void electron_update(MeshBlock *pmb,const Real time, const Real dt,const AthenaA
 
         Real fe = 0.5;
 
-        pmb->pscalars->s(1,k,j,i) += fe * gem1/(gm1) * std::pow(dh,g-ge) * (r_actual - pmb->pscalars->r(0,k,j,i))
+        pmb->pscalars->s(1,k,j,i) += fe * gem1/(gm1) * std::pow(dh,g-ge) * (r_actual - pmb->pscalars->r(0,k,j,i));
 
 
         pmb->pscalars->s(0,k,j,i) = s_actual;
