@@ -123,9 +123,41 @@ void Mesh::UserWorkAfterLoop(ParameterInput *pin) {
 }
 
 
+Real fe_calc(Real beta, Real Ttot ,Real Te)
+{
+
+  Real mrat = 1836.152672; 
+  Real Trat = Ttot/Te;
+  //Calculations for fe
+  Real c1 = .92 ;//heating constant
+  
+  if(beta>1.e20) beta = 1.e20;
+  Real mbeta = 2.-.2*std::log10(Trat);
+  
+  Real c3,c2;
+  if(Trat<=1.){
+      
+      c2 = 1.6 / Trat ;
+      c3 = 18. + 5.*std::log10(Trat);
+      
+  }
+  else{
+      c2 = 1.2/ Trat ;
+      c3 = 18. ;
+  }
+  
+  Real c22 = std::pow(c2,2.);
+  Real c32 = std::pow(c3,2.);
+  
+  Real Qp_over_Qe = c1 * (c22+std::pow(beta,mbeta))/(c32 + std::pow(beta,mbeta)) * exp(-1./beta)*std::pow(mrat*Trat,.5) ;
+  
+
+  
+  return 1./(1.+Qp_over_Qe);
+
+}
 //NOTE: primitives are half time step (or initial), conservatives at end of time step (or half)
 void electron_update(MeshBlock *pmb,const Real time, const Real dt,const AthenaArray<Real> &prim, const AthenaArray<Real> &bcc, AthenaArray<Real> &cons){
-
 
         AthenaArray<Real> prim_new,bcc_new;
         prim_new.NewAthenaArray(NHYDRO, pmb->ncells3, pmb->ncells2, pmb->ncells1);
