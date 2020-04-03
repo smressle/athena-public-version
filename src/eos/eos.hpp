@@ -164,6 +164,7 @@ class EquationOfState {
   Real GetIsoSoundSpeed() const {return iso_sound_speed_;}
   Real GetDensityFloor() const {return density_floor_;}
   Real GetPressureFloor() const {return pressure_floor_;}
+  Real GetFixedValue(int k, int j, int i) {return fixed_(k,j,i);}
   EosTable* ptable; // pointer to EOS table data
 #if GENERAL_EOS
   Real GetGamma();

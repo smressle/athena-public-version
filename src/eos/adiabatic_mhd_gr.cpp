@@ -68,6 +68,8 @@ EquationOfState::EquationOfState(MeshBlock *pmb, ParameterInput *pin) :
   normal_mm_.NewAthenaArray(4,nc1);
   normal_bb_.NewAthenaArray(4,nc1);
   normal_tt_.NewAthenaArray(nc1);
+  int nc2 = pmb->ncells2, nc3 = pmb->ncells3;
+  fixed_.NewAthenaArray(nc3, nc2, nc1);
 }
 
 
@@ -270,6 +272,8 @@ void EquationOfState::ConservedToPrimitive(
           PrimitiveToConservedSingle(prim, gamma_adi, bb_cc, g_, g_inv_, k, j, i, cons,
                                      pco);
         }
+
+        fixed_(k,j,i) = fixed;
       }
     }
   }
