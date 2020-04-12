@@ -47,9 +47,8 @@ void FixedBoundary(MeshBlock *pmb, Coordinates *pcoord, AthenaArray<Real> &prim,
 void InflowBoundary(MeshBlock *pmb, Coordinates *pcoord, AthenaArray<Real> &prim,
                     FaceField &bb, Real time, Real dt,
                     int il, int iu, int jl, int ju, int kl, int ku, int ngh);
-Real gm1,gem1,ge;
 
- //void electron_update(MeshBlock *pmb,const Real time, const Real dt,const AthenaArray<Real> &prim, const AthenaArray<Real> &bcc, AthenaArray<Real> &cons);
+
 
 namespace {
 void GetBoyerLindquistCoordinates(Real x1, Real x2, Real x3, Real *pr,
@@ -97,10 +96,60 @@ Real pert_amp, pert_kr, pert_kz;            // parameters for initial perturbati
 
 } // namespace
 
+// Electron functions and variables
+void electron_update(Coordinates *pcoord, EquationOfState *peos, Hydro *phydro, Field *pfield, 
+  PassiveScalars *pscalars, int is, int ie, int js, int je, int ks, int ke );
+void init_electrons(PassiveScalars *pscalars, Hydro *phydro, Field *pfield,
+  int il, int iu, int jl, int ju, int kl, int ku);
+Real fe_howes_(Real beta, Real sigma, Real Ttot ,Real Te);
+Real fe_werner_(Real beta, Real sigma, Real Ttot ,Real Te);
+Real fe_rowan_(Real beta, Real sigma_w, Real Ttot ,Real Te);
+Real gm1,gem1,ge;
+
+void init_electrons(PassiveScalars *pscalars, Hydro *phydro, Field *pfield,
+  int il, int iu, int jl, int ju, int kl, int ku){
+
+  Real Te_over_Ttot_init = 0.1;
+  for (int k=kl; k<=ku; ++k) {
+    for (int j=jl; j<=ju; ++j) {
+      for (int i=il; i<=iu; ++i) {
+          // set entropy
+        if (NSCALARS > 0) {
+          pscalars->s(0,k,j,i) = 1.0 * phydro->u(IDN,k,j,i) * 
+                                  phydro->w(IPR,k,j,i) / std::pow(phydro->w(IDN,k,j,i),gamma_adi) ; //total
+          pscalars->r(0,k,j,i) = pscalars->s(0,k,j,i) / phydro->u(IDN,k,j,i);
+          pscalars->s1(0,k,j,i) = pscalars->s(0,k,j,i);
+        }
+        if (NSCALARS > 1) {
+          pscalars->s(1,k,j,i) = Te_over_Ttot_init * phydro->u(IDN,k,j,i) * 
+                                  phydro->w(IPR,k,j,i) / std::pow(phydro->w(IDN,k,j,i),ge); //electron
+          pscalars->r(1,k,j,i) = pscalars->s(1,k,j,i) / phydro->u(IDN,k,j,i);
+          pscalars->s1(1,k,j,i) = pscalars->s(1,k,j,i);
+
+        }
+        if (NSCALARS > 2) {
+          pscalars->s(2,k,j,i) = Te_over_Ttot_init * phydro->u(IDN,k,j,i) * 
+                                  phydro->w(IPR,k,j,i) / std::pow(phydro->w(IDN,k,j,i),ge); //electron
+          pscalars->r(2,k,j,i) = pscalars->s(2,k,j,i) / phydro->u(IDN,k,j,i);
+          pscalars->s1(2,k,j,i) = pscalars->s(2,k,j,i);
+
+        }
+        if (NSCALARS > 3) {
+          pscalars->s(3,k,j,i) = Te_over_Ttot_init * phydro->u(IDN,k,j,i) * 
+                                  phydro->w(IPR,k,j,i) / std::pow(phydro->w(IDN,k,j,i),ge); //electron
+          pscalars->r(3,k,j,i) = pscalars->s(3,k,j,i) / phydro->u(IDN,k,j,i);
+          pscalars->s1(3,k,j,i) = pscalars->s(3,k,j,i);
+
+        }
+      }
+    } 
+  } 
+
+  return;
+}
 
 
-
-Real fe_calc(Real beta, Real Ttot ,Real Te)
+Real fe_howes_(Real beta, Real sigma,Real Ttot ,Real Te)
 {
 
   Real mrat = 1836.152672; //mp/me
@@ -134,123 +183,211 @@ Real fe_calc(Real beta, Real Ttot ,Real Te)
   return 1./(1.+Qp_over_Qe);
 
 }
-//NOTE: primitives are half time step (or initial), conservatives at end of time step (or half)
-void electron_update(MeshBlock *pmb,const Real time, const Real dt,const AthenaArray<Real> &prim, const AthenaArray<Real> &bcc, AthenaArray<Real> &cons){
 
-        AthenaArray<Real> prim_new,bcc_new;
-        prim_new.NewAthenaArray(NHYDRO, pmb->ncells3, pmb->ncells2, pmb->ncells1);
-        bcc_new.NewAthenaArray(NFIELD, pmb->ncells3, pmb->ncells2, pmb->ncells1);
-        pmb->peos->ConservedToPrimitive(cons, prim, pmb->pfield->b,prim_new, bcc_new,pmb->pcoord, 
-          pmb->is, pmb->ie, pmb->js, pmb->je, pmb->ks, pmb->ke);
-
-        Real d_floor = pmb->peos->GetDensityFloor();
-        Real p_floor = pmb->peos->GetPressureFloor();
-        // if (GENERAL_RELATIVITY){
-        //   Real rho_min = pmb->peos->rho_min_; 
-        //   Real rho_pow = pmb->peos->rho_pow_;
-        //   Real pgas_min = pmb->peos->pgas_min_; 
-        //   Real pgas_pow = pmb->peos->pgas_pow_;
-        //   Real sigma_max = pmb->peos->sigma_max_;
-        //   Real beta_min = pmb->peos->beta_min_;
-        // }
-          // Create aliases for metric
-      AthenaArray<Real> &g = pmb->ruser_meshblock_data[0], &gi = pmb->ruser_meshblock_data[1];
-     for (int k=pmb->ks; k<=pmb->ke; ++k) {
-#pragma omp parallel for schedule(static)
-    for (int j=pmb->js; j<=pmb->je; ++j) {
-            pmb->pcoord->CellMetric(k, j, pmb->is, pmb->ie, g, gi);
-#pragma simd
-      for (int i=pmb->is; i<=pmb->ie; ++i) {
+Real fe_werner_(Real beta, Real sigma,Real Ttot ,Real Te)
+{
 
 
-        Real dh = prim(IDN,k,j,i);
-        Real pnew = prim_new(IPR,k,j,i);
-        Real dnew = prim_new(IDN,k,j,i);
-        Real r_actual = pnew/std::pow(dnew,gm1+1);
+  Real sigma_term = sigma/5.0 / (2.0 + sigma/5.0);
+  return 0.25 * ( 1.0 + std::sqrt(sigma_term) );
 
-        Real s_actual = cons(IDN,k,j,i) * r_actual;
+}
 
-        Real Q = std::pow(dh,gm1)/gm1 * (s_actual - pmb->pscalars->s(0,k,j,i))/dt;
+Real fe_rowan_(Real beta, Real sigma_w, Real Ttot ,Real Te){
 
-        //Calculations for fe
+  Real beta_max = 1.0/(4.0*sigma_w);
+  if(beta_max>1.e20 || std::isnan(beta_max) || std::isinf(beta_max) )beta_max = 1e20;
+  if(beta>1.e20 || std::isnan(beta) || std::isinf(beta) ) beta = 1.e20;
+  if (beta>beta_max) beta = beta_max;
 
-        Real uu1 = prim(IM1,k,j,i);
-        Real uu2 = prim(IM2,k,j,i);
-        Real uu3 = prim(IM3,k,j,i);
-        Real tmp = g(I11,i)*uu1*uu1 + 2.0*g(I12,i)*uu1*uu2 + 2.0*g(I13,i)*uu1*uu3
-                   + g(I22,i)*uu2*uu2 + 2.0*g(I23,i)*uu2*uu3
-                   + g(I33,i)*uu3*uu3;
-        Real gamma = std::sqrt(1.0 + tmp);
+  Real arg_num = std::pow(1.0-beta/beta_max,3.3);
+  Real arg_den = (1.0 + 1.2 * std::pow(sigma_w,0.7));
+  Real arg = arg_num/arg_den;
+  return 0.5 * std::exp(-arg);
 
-        // Calculate 4-velocity
-        Real alpha = std::sqrt(-1.0/gi(I00,i));
-        Real u0 = gamma/alpha;
-        Real u1 = uu1 - alpha * gamma * gi(I01,i);
-        Real u2 = uu2 - alpha * gamma * gi(I02,i);
-        Real u3 = uu3 - alpha * gamma * gi(I03,i);
-        Real u_0, u_1, u_2, u_3;
-        pmb->pcoord->LowerVectorCell(u0, u1, u2, u3, k, j, i, &u_0, &u_1, &u_2, &u_3);
 
-        // Calculate 4-magnetic field
-        Real bb1 = bcc(IB1,k,j,i);
-        Real bb2 = bcc(IB2,k,j,i);
-        Real bb3 = bcc(IB3,k,j,i);
-        Real b0 = g(I01,i)*u0*bb1 + g(I02,i)*u0*bb2 + g(I03,i)*u0*bb3
-                  + g(I11,i)*u1*bb1 + g(I12,i)*u1*bb2 + g(I13,i)*u1*bb3
-                  + g(I12,i)*u2*bb1 + g(I22,i)*u2*bb2 + g(I23,i)*u2*bb3
-                  + g(I13,i)*u3*bb1 + g(I23,i)*u3*bb2 + g(I33,i)*u3*bb3;
-        Real b1 = (bb1 + b0 * u1) / u0;
-        Real b2 = (bb2 + b0 * u2) / u0;
-        Real b3 = (bb3 + b0 * u3) / u0;
-        Real b_0, b_1, b_2, b_3;
-        pmb->pcoord->LowerVectorCell(b0, b1, b2, b3, k, j, i, &b_0, &b_1, &b_2, &b_3);
 
-        // Calculate magnetic pressure
-        Real b_sq = b0*b_0 + b1*b_1 + b2*b_2 + b3*b_3;
+}
 
-        Real beta = 2.0 * prim(IPR,k,j,i)/(b_sq + 1e-15);
-        Real Ttot = prim(IPR,k,j,i)/prim(IDN,k,j,i);
-        Real Te   = pmb->pscalars->r(1,k,j,i) * std::pow(dh,ge) / dh;
+void electron_update(Coordinates *pcoord, EquationOfState *peos, Hydro *phydro, Field *pfield, 
+  PassiveScalars *pscalars, int is, int ie, int js, int je, int ks, int ke ) {
+  // Create aliases for metric
 
-        //Real fe = fe_calc(beta,Ttot,Te);
-        Real fe = 0.5;
+//not sure how to avoid this #if statement.  
+#if (GENERAL_RELATIVITY)
+  AthenaArray<Real> &g = phydro->pmy_block->ruser_meshblock_data[0],&gi = phydro->pmy_block->ruser_meshblock_data[1];
+#else
+  AthenaArray<Real> g,gi; //should never be called
+#endif
+
+
+
+  Real d_floor = peos->GetDensityFloor();
+  Real p_floor = peos->GetPressureFloor();
+
+  AthenaArray<Real> bcc1;
+
+
+  int il = is - NGHOST; int jl = js; int kl = ks;
+  int iu = ie + NGHOST; int ju = je; int ku = ke;
+  if (phydro->pmy_block->ncells2>1) {
+    jl -= NGHOST; ju += NGHOST;
+  }
+  if (phydro->pmy_block->ncells3>1) {
+    kl -= NGHOST; ku += NGHOST;
+  }
+
+
+  if (MAGNETIC_FIELDS_ENABLED) 
+    bcc1.NewAthenaArray(NFIELD, phydro->pmy_block->ncells3, phydro->pmy_block->ncells2, phydro->pmy_block->ncells1);
+
+
+  pfield->CalculateCellCenteredField(pfield->b1, bcc1, pcoord, il, iu, jl, ju, kl, ku);
+  // Go through all cells
+  for (int k=ks; k<=ke; ++k) {
+    for (int j=js; j<=je; ++j) {
+      if (GENERAL_RELATIVITY) pcoord->CellMetric(k, j, is, ie, g, gi);
+      for (int i=is; i<=ie; ++i) {
+
+        Real b_sqh;
+        if (GENERAL_RELATIVITY){
+          // Calculate normal-frame Lorentz factor at half time step
+          Real uu1 = phydro->w1(IM1,k,j,i);
+          Real uu2 = phydro->w1(IM2,k,j,i);
+          Real uu3 = phydro->w1(IM3,k,j,i);
+          Real tmp = g(I11,i)*uu1*uu1 + 2.0*g(I12,i)*uu1*uu2 + 2.0*g(I13,i)*uu1*uu3
+                     + g(I22,i)*uu2*uu2 + 2.0*g(I23,i)*uu2*uu3
+                     + g(I33,i)*uu3*uu3;
+          Real gamma = std::sqrt(1.0 + tmp);
+
+
+          // Calculate 4-velocity
+          Real alpha = std::sqrt(-1.0/gi(I00,i));
+          Real u0 = gamma/alpha;
+          Real u1 = uu1 - alpha * gamma * gi(I01,i);
+          Real u2 = uu2 - alpha * gamma * gi(I02,i);
+          Real u3 = uu3 - alpha * gamma * gi(I03,i);
+          Real u_0, u_1, u_2, u_3;
+          pcoord->LowerVectorCell(u0, u1, u2, u3, k, j, i, &u_0, &u_1, &u_2, &u_3);
+
+
+
+          // Calculate 4-magnetic field
+          Real bb1 = bcc1(IB1,k,j,i);
+          Real bb2 = bcc1(IB2,k,j,i);
+          Real bb3 = bcc1(IB3,k,j,i);
+          Real b0 = g(I01,i)*u0*bb1 + g(I02,i)*u0*bb2 + g(I03,i)*u0*bb3
+                    + g(I11,i)*u1*bb1 + g(I12,i)*u1*bb2 + g(I13,i)*u1*bb3
+                    + g(I12,i)*u2*bb1 + g(I22,i)*u2*bb2 + g(I23,i)*u2*bb3
+                    + g(I13,i)*u3*bb1 + g(I23,i)*u3*bb2 + g(I33,i)*u3*bb3;
+          Real b1 = (bb1 + b0 * u1) / u0;
+          Real b2 = (bb2 + b0 * u2) / u0;
+          Real b3 = (bb3 + b0 * u3) / u0;
+          Real b_0, b_1, b_2, b_3;
+          pcoord->LowerVectorCell(b0, b1, b2, b3, k, j, i, &b_0, &b_1, &b_2, &b_3);
+
+          // Calculate magnetic pressure
+          b_sqh = b0*b_0 + b1*b_1 + b2*b_2 + b3*b_3;
+        }
+        else{ //non relativistic
+          b_sqh = SQR(bcc1(IB1,k,j,i)) + SQR(bcc1(IB2,k,j,i)) + SQR(bcc1(IB3,k,j,i));
+        }
+
+        Real dh = phydro->w1(IDN,k,j,i);
+        Real ph = phydro->w1(IPR,k,j,i);
+        Real pnew = phydro->w(IPR,k,j,i);
+        Real dnew = phydro->w(IDN,k,j,i);
+        Real r_actual = pnew/std::pow(dnew,gamma_adi);
+
+        Real s_actual = phydro->u(IDN,k,j,i) * r_actual;
+
+        //Real Q = std::pow(dh,gm1)/gm1 * (s_actual - pmb->pscalars->s(0,k,j,i))/dt;
+
+        //Variables needed for fe
+
+        Real s_old = pscalars->s1(1,k,j,i);
+        Real r_old = s_old/phydro->u1(IDN,k,j,i);
+
+        Real beta = 2.0 * ph/(b_sqh + 1e-15);
+        Real sigma = b_sqh/(dh);
+        Real sigma_w = b_sqh/(dh + gamma_adi/gm1 * ph);
+        Real Ttot = ph/dh;
+        Real Te   = r_old * std::pow(dh,ge) / dh;
+
+        Real fe_howes = fe_howes_(beta,sigma, Ttot,Te);
+        Real fe_rowan = fe_rowan_(beta,sigma_w,Ttot,Te);
+        Real fe_werner = fe_werner_(beta,sigma,Ttot,Te);
+        //Real fe = 0.5;
 
         bool fixed = false;
 
-        if (GENERAL_RELATIVITY) fixed = pmb->peos->GetFixedValue(k,j,i);
+        if (GENERAL_RELATIVITY) fixed = peos->GetFixedValue(k,j,i);
         else if (dnew == d_floor || pnew == p_floor) fixed = true;
 
-        Real s_old = pmb->pscalars->s(1,k,j,i);
-        Real r_old = pmb->pscalars->r(1,k,j,i);
-        if (fixed){
-          Real pe_old = pmb->pscalars->r(1,k,j,i) * std::pow(dh,ge) ; 
 
-          pmb->pscalars->r(1,k,j,i) = 0.1 * pnew/std::pow(dnew,ge); //pe_old/std::pow(dnew,ge);
-          pmb->pscalars->s(1,k,j,i) = dnew * pmb->pscalars->r(1,k,j,i);
+
+        if (fixed){ //keep electron pressure unchanged when floor or other fixups are used
+          // Real pe_old = r_old * std::pow(dh,ge) ; 
+
+          // pscalars->r(1,k,j,i) = pe_old/std::pow(dnew,ge); //0.1 * pnew/std::pow(dnew,ge); //pe_old/std::pow(dnew,ge);
+          // pscalars->s(1,k,j,i) = phydro->u(IDN,k,j,i) * pscalars->r(1,k,j,i);
+
+
+          pscalars->r(1,k,j,i) = 0.1 * pnew/std::pow(dnew,ge); //pe_old/std::pow(dnew,ge);
+          pscalars->s(1,k,j,i) = phydro->u(IDN,k,j,i) * pscalars->r(1,k,j,i);
+          if (NSCALARS>2){
+            pscalars->r(2,k,j,i) = 0.1 * pnew/std::pow(dnew,ge); //pe_old/std::pow(dnew,ge);
+            pscalars->s(2,k,j,i) = phydro->u(IDN,k,j,i) * pscalars->r(2,k,j,i);
+          }
+          if (NSCALARS>3){
+            //Real pe_old = pscalars->s1(3,k,j,i)/phydro->u1(IDN,k,j,i) *std::pow(dh,ge);
+            pscalars->r(3,k,j,i) = 0.1 * pnew/std::pow(dnew,ge);
+            pscalars->s(3,k,j,i) = phydro->u(IDN,k,j,i) * pscalars->r(3,k,j,i);
+          }
         }
-        else{
-          pmb->pscalars->s(1,k,j,i) += pmb->pscalars->s(1,k,j,i)/dnew + fe * gem1/(gm1) * std::pow(dh,gamma_adi-ge) * (r_actual - pmb->pscalars->s(0,k,j,i)/dnew);
-          pmb->pscalars->r(1,k,j,i) = pmb->pscalars->s(1,k,j,i)/dnew;
+        else{ 
+          pscalars->r(1,k,j,i) +=  fe_howes * gem1/(gm1) * std::pow(dh,gamma_adi-ge) * (r_actual - pscalars->r(0,k,j,i));
+          pscalars->s(1,k,j,i) = pscalars->r(1,k,j,i) * phydro->u(IDN,k,j,i);
+          if (NSCALARS>2){
+            pscalars->r(2,k,j,i) +=  fe_rowan * gem1/(gm1) * std::pow(dh,gamma_adi-ge) * (r_actual - pscalars->r(0,k,j,i));
+            pscalars->s(2,k,j,i) = pscalars->r(2,k,j,i) * phydro->u(IDN,k,j,i);
+          }
+          if (NSCALARS>3){
+            pscalars->r(3,k,j,i) +=  fe_werner * gem1/(gm1) * std::pow(dh,gamma_adi-ge) * (r_actual - pscalars->r(0,k,j,i));
+            pscalars->s(3,k,j,i) = pscalars->r(3,k,j,i) * phydro->u(IDN,k,j,i);
+          }
         }
 
-        if (std::isnan(pmb->pscalars->s(1,k,j,i)) || std::isinf(pmb->pscalars->s(1,k,j,i)) ){
-          fprintf(stderr,"fixed: %d r_actual: %g s: %g pe_old: %g\n",fixed,r_actual,pmb->pscalars->s(0,k,j,i),r_old * std::pow(dh,ge) );
-        exit(0);
-        }
+
+        // Limit electron temperature to be <= total temperature
+
+        // Ttot = pnew/dnew;
+        // Te = pscalars->r(1,k,j,i) * std::pow(dnew,ge) / dnew;
+
+        // if (Te >Ttot) Te = Ttot;
+        // pscalars->r(1,k,j,i) = Te * dnew/std::pow(dnew,ge);
+        // pscalars->s(1,k,j,i) = pscalars->r(1,k,j,i) * phydro->u(IDN,k,j,i);
+
+        // if (Te>Ttot)
+        // if (std::isnan(pscalars->s(1,k,j,i)) || std::isinf(pscalars->s(1,k,j,i)) ){
+        //    fprintf(stderr,"fixed: %d r_actual: %g s: %g pe_old: %g\n",fixed,r_actual,pscalars->s(0,k,j,i),r_old * std::pow(dh,ge) );
+        //    exit(0);
+        // }
 
 
-        pmb->pscalars->s(0,k,j,i) = s_actual;
-        pmb->pscalars->r(0,k,j,i) = r_actual;
+        pscalars->s(0,k,j,i) = s_actual;
+        pscalars->r(0,k,j,i) = r_actual;
 
-      
+
 
       }
     }
   }
 
-  prim_new.DeleteAthenaArray();
-  bcc_new.DeleteAthenaArray();
+  if (MAGNETIC_FIELDS_ENABLED) bcc1.DeleteAthenaArray();
+  return;
 }
+
 
 //----------------------------------------------------------------------------------------
 // Function for preparing Mesh
@@ -1428,29 +1565,13 @@ void MeshBlock::ProblemGenerator(ParameterInput *pin) {
   }
 
 
-  Real Te_over_Ttot_init = 0.1;
-  for (int k=kl; k<=ku; ++k) {
-    for (int j=jl; j<=ju; ++j) {
-      for (int i=il; i<=iu; ++i) {
-          // set entropy
-        if (NSCALARS > 0) {
-          pscalars->s(0,k,j,i) = 1.0 * phydro->u(IDN,k,j,i) * 
-                                  phydro->w(IPR,k,j,i) / std::pow(phydro->w(IDN,k,j,i),gamma_adi) ; //total
-          pscalars->r(0,k,j,i) = pscalars->s(0,k,j,i) / phydro->u(IDN,k,j,i);
-          pscalars->s1(0,k,j,i) = pscalars->s(0,k,j,i);
-        }
-        if (NSCALARS > 1) {
-          pscalars->s(1,k,j,i) = Te_over_Ttot_init * phydro->u(IDN,k,j,i) * 
-                                  phydro->w(IPR,k,j,i) / std::pow(phydro->w(IDN,k,j,i),ge); //electron
-          pscalars->r(1,k,j,i) = pscalars->s(1,k,j,i) / phydro->u(IDN,k,j,i);
-          pscalars->s1(1,k,j,i) = pscalars->s(1,k,j,i);
-
-        }
-      }
-    } 
-  } 
   // Call user work function to set output variables
+
   //UserWorkInLoop();
+
+
+  init_electrons(pscalars, phydro, pfield, il, iu, jl, ju, kl,ku);
+
   return;
 }
 
@@ -1467,15 +1588,10 @@ void MeshBlock::UserWorkInLoop() {
   // Create aliases for metric
   AthenaArray<Real> &g = ruser_meshblock_data[0], &gi = ruser_meshblock_data[1];
 
-  Real d_floor = peos->GetDensityFloor();
-  Real p_floor = peos->GetPressureFloor();
-
-  AthenaArray<Real> bcc1;
-
-  if (MAGNETIC_FIELDS_ENABLED) bcc1.NewAthenaArray(NFIELD, ncells3, ncells2, ncells1);
 
   int il = is - NGHOST; int jl = js; int kl = ks;
   int iu = ie + NGHOST; int ju = je; int ku = ke;
+
   if (ncells2>1) {
     jl -= NGHOST; ju += NGHOST;
   }
@@ -1483,7 +1599,6 @@ void MeshBlock::UserWorkInLoop() {
     kl -= NGHOST; ku += NGHOST;
   }
 
-  pfield->CalculateCellCenteredField(pfield->b1, bcc1, pcoord, il, iu, jl, ju, kl, ku);
   // Go through all cells
   for (int k=ks; k<=ke; ++k) {
     for (int j=js; j<=je; ++j) {
@@ -1534,113 +1649,12 @@ void MeshBlock::UserWorkInLoop() {
         Real b_sq = b0*b_0 + b1*b_1 + b2*b_2 + b3*b_3;
         user_out_var(1,k,j,i) = b_sq/2.0;
 
-        // Calculate normal-frame Lorentz factor at half time step
-        uu1 = phydro->w1(IM1,k,j,i);
-        uu2 = phydro->w1(IM2,k,j,i);
-        uu3 = phydro->w1(IM3,k,j,i);
-        tmp = g(I11,i)*uu1*uu1 + 2.0*g(I12,i)*uu1*uu2 + 2.0*g(I13,i)*uu1*uu3
-                   + g(I22,i)*uu2*uu2 + 2.0*g(I23,i)*uu2*uu3
-                   + g(I33,i)*uu3*uu3;
-        gamma = std::sqrt(1.0 + tmp);
-
-
-        // Calculate 4-velocity
-        alpha = std::sqrt(-1.0/gi(I00,i));
-        u0 = gamma/alpha;
-        u1 = uu1 - alpha * gamma * gi(I01,i);
-        u2 = uu2 - alpha * gamma * gi(I02,i);
-        u3 = uu3 - alpha * gamma * gi(I03,i);
-        u_0, u_1, u_2, u_3;
-        pcoord->LowerVectorCell(u0, u1, u2, u3, k, j, i, &u_0, &u_1, &u_2, &u_3);
-
-
-
-        // Calculate 4-magnetic field
-        bb1 = bcc1(IB1,k,j,i);
-        bb2 = bcc1(IB2,k,j,i);
-        bb3 = bcc1(IB3,k,j,i);
-        b0 = g(I01,i)*u0*bb1 + g(I02,i)*u0*bb2 + g(I03,i)*u0*bb3
-                  + g(I11,i)*u1*bb1 + g(I12,i)*u1*bb2 + g(I13,i)*u1*bb3
-                  + g(I12,i)*u2*bb1 + g(I22,i)*u2*bb2 + g(I23,i)*u2*bb3
-                  + g(I13,i)*u3*bb1 + g(I23,i)*u3*bb2 + g(I33,i)*u3*bb3;
-        b1 = (bb1 + b0 * u1) / u0;
-        b2 = (bb2 + b0 * u2) / u0;
-        b3 = (bb3 + b0 * u3) / u0;
-        b_0, b_1, b_2, b_3;
-        pcoord->LowerVectorCell(b0, b1, b2, b3, k, j, i, &b_0, &b_1, &b_2, &b_3);
-
-        // Calculate magnetic pressure
-        Real b_sqh = b0*b_0 + b1*b_1 + b2*b_2 + b3*b_3;
-
-        Real dh = phydro->w1(IDN,k,j,i);
-        Real ph = phydro->w1(IPR,k,j,i);
-        Real pnew = phydro->w(IPR,k,j,i);
-        Real dnew = phydro->w(IDN,k,j,i);
-        Real r_actual = pnew/std::pow(dnew,gamma_adi);
-
-        Real s_actual = phydro->u(IDN,k,j,i) * r_actual;
-
-        //Real Q = std::pow(dh,gm1)/gm1 * (s_actual - pmb->pscalars->s(0,k,j,i))/dt;
-
-        //Variables needed for fe
-
-        Real s_old = pscalars->s1(1,k,j,i);
-        Real r_old = s_old/phydro->u1(IDN,k,j,i);
-
-        Real beta = 2.0 * ph/(b_sq + 1e-15);
-        Real Ttot = ph/dh;
-        Real Te   = r_old * std::pow(dh,ge) / dh;
-
-        Real fe = fe_calc(beta,Ttot,Te);
-        //Real fe = 0.5;
-
-        bool fixed = false;
-
-        if (GENERAL_RELATIVITY) fixed = peos->GetFixedValue(k,j,i);
-        else if (dnew == d_floor || pnew == p_floor) fixed = true;
-
-        if (fixed){ //keep electron pressure unchanged when floor or other fixups are used
-          // Real pe_old = r_old * std::pow(dh,ge) ; 
-
-          // pscalars->r(1,k,j,i) = pe_old/std::pow(dnew,ge); //0.1 * pnew/std::pow(dnew,ge); //pe_old/std::pow(dnew,ge);
-          // pscalars->s(1,k,j,i) = phydro->u(IDN,k,j,i) * pscalars->r(1,k,j,i);
-
-
-          pscalars->r(1,k,j,i) = 0.1 * pnew/std::pow(dnew,ge); //pe_old/std::pow(dnew,ge);
-          pscalars->s(1,k,j,i) = phydro->u(IDN,k,j,i) * pscalars->r(1,k,j,i);
-        }
-        else{ 
-          pscalars->r(1,k,j,i) +=  fe * gem1/(gm1) * std::pow(dh,gamma_adi-ge) * (r_actual - pscalars->r(0,k,j,i));
-          pscalars->s(1,k,j,i) = pscalars->r(1,k,j,i) * phydro->u(IDN,k,j,i);
-        }
-
-
-        // Limit electron temperature to be <= total temperature
-
-        // Ttot = pnew/dnew;
-        // Te = pscalars->r(1,k,j,i) * std::pow(dnew,ge) / dnew;
-
-        // if (Te >Ttot) Te = Ttot;
-        // pscalars->r(1,k,j,i) = Te * dnew/std::pow(dnew,ge);
-        // pscalars->s(1,k,j,i) = pscalars->r(1,k,j,i) * phydro->u(IDN,k,j,i);
-
-        // if (Te>Ttot)
-        // if (std::isnan(pscalars->s(1,k,j,i)) || std::isinf(pscalars->s(1,k,j,i)) ){
-        //    fprintf(stderr,"fixed: %d r_actual: %g s: %g pe_old: %g\n",fixed,r_actual,pscalars->s(0,k,j,i),r_old * std::pow(dh,ge) );
-        //    exit(0);
-        // }
-
-
-        pscalars->s(0,k,j,i) = s_actual;
-        pscalars->r(0,k,j,i) = r_actual;
-
-
-
       }
     }
   }
 
-  if (MAGNETIC_FIELDS_ENABLED) bcc1.DeleteAthenaArray();
+
+electron_update(pcoord, peos, phydro, pfield, pscalars, is, ie, js, je, ks, ke );
   return;
 }
 
@@ -2287,3 +2301,4 @@ Real CalculateMagneticPressure(Real bb1, Real bb2, Real bb3, Real r, Real theta,
   return 0.5*b_sq;
 }
 } // namespace
+
