@@ -37,12 +37,14 @@ HydroSourceTerms::HydroSourceTerms(Hydro *phyd, ParameterInput *pin) {
   if (gm_ != 0.0) {
     if (std::strcmp(COORDINATE_SYSTEM, "spherical_polar") == 0
         || (std::strcmp(COORDINATE_SYSTEM, "cylindrical") == 0
-            && phyd->pmy_block->block_size.nx3==1)) {
+            && phyd->pmy_block->block_size.nx3==1) ||
+          std::strcmp(COORDINATE_SYSTEM, "cartesian") == 0) {
       hydro_sourceterms_defined = true;
     } else {
       std::stringstream msg;
       msg << "### FATAL ERROR in HydroSourceTerms constructor" << std::endl
-          << "The point mass gravity works only in spherical polar coordinates"
+          << "The point mass gravity works only in spherical polar coordinates,"
+          << "cartesian coordinates,"
           << "or in 2D cylindrical coordinates." << std::endl
           << "Check <problem> GM parameter in the input file." << std::endl;
       ATHENA_ERROR(msg);
