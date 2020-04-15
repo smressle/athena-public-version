@@ -92,20 +92,8 @@ Real mu_highT = 1./(2.*X + 3.*(1.-X-Z)/4. + Z/2.);  //mean molecular weight in p
  void emf_source(MeshBlock *pmb,const Real time, const Real dt,const AthenaArray<Real> &prim,  const AthenaArray<Real> &bcc, const AthenaArray<Real> &cons, EdgeField &e);
  void star_update_function(MeshBlock *pmb,const Real time, const Real dt,const AthenaArray<Real> &prim, const AthenaArray<Real> &bcc, AthenaArray<Real> &cons);
  void apply_inner_boundary_condition(MeshBlock *pmb,AthenaArray<Real> &prim,PassiveScalars *pscalars);
- void Dirichlet_Boundary(MeshBlock *pmb, Coordinates *pco, AthenaArray<Real> &prim, FaceField &b,
+ void FixedBoundary(MeshBlock *pmb, Coordinates *pco, AthenaArray<Real> &prim, FaceField &b,
                     Real time, Real dt, int is, int ie, int js, int je, int ks, int ke);
- void DirichletInnerX1(MeshBlock *pmb,Coordinates *pco, AthenaArray<Real> &prim, FaceField &b,
-                 Real time, Real dt, int is, int ie, int js, int je, int ks, int ke);
-void DirichletOuterX1(MeshBlock *pmb,Coordinates *pco, AthenaArray<Real> &prim, FaceField &b,
-                 Real time, Real dt, int is, int ie, int js, int je, int ks, int ke);
-void DirichletInnerX2(MeshBlock *pmb,Coordinates *pco, AthenaArray<Real> &prim, FaceField &b,
-                 Real time, Real dt, int is, int ie, int js, int je, int ks, int ke);
-void DirichletOuterX2(MeshBlock *pmb,Coordinates *pco, AthenaArray<Real> &prim, FaceField &b,
-                 Real time, Real dt, int is, int ie, int js, int je, int ks, int ke);
-void DirichletInnerX3(MeshBlock *pmb,Coordinates *pco, AthenaArray<Real> &prim, FaceField &b,
-                 Real time, Real dt, int is, int ie, int js, int je, int ks, int ke);
-void DirichletOuterX3(MeshBlock *pmb,Coordinates *pco, AthenaArray<Real> &prim, FaceField &b,
-                 Real time, Real dt, int is, int ie, int js, int je, int ks, int ke);
 void interp_inits(const Real x, const Real y, const Real z, Real *rho, Real *vx, Real *vy, Real *vz, Real *p);
 
 int RefinementCondition(MeshBlock *pmb);
@@ -704,7 +692,11 @@ static Real tcool(const Real d, const Real T)
   return  (T) * (mu_highT) / ( gm1 * d *             Lambda_T(T)/UnitLambda_times_mp_times_kev );
 #endif
 }
-
+void FixedBoundary(MeshBlock *pmb, Coordinates *pcoord, AthenaArray<Real> &prim,
+                   FaceField &bb, Real time, Real dt,
+                   int is, int ie, int js, int je, int ks, int ke, int ngh) {
+  return;
+}
 
 static void inner_boundary(MeshBlock *pmb, const AthenaArray<Real> &prim_old, AthenaArray<Real> &prim ,PassiveScalars *pscalars)
 {
@@ -978,7 +970,7 @@ void get_uniform_box_spacing(const RegionSize box_size, Real *DX, Real *DY, Real
 // }
 
 void set_boundary_arrays(std::string initfile, const RegionSize block_size, const Coordinates *pcoord, const int is, const int ie, const int js, const int je, const int ks, const int ke,
-  AthenaArray<Real> &prim_bound, AthenaArray<Real> &bx1f_bound, AthenaArray<Real> &bx2f_bound, AthenaArray<Real> &bx3f_bound){
+  AthenaArray<Real> &prim_bound, FaceField &b_bound){
       FILE *input_file;
         if ((input_file = fopen(initfile.c_str(), "r")) == NULL)   
                fprintf(stderr, "Cannot open %s, %s\n", "input_file",initfile.c_str());
@@ -1284,21 +1276,21 @@ if (MAGNETIC_FIELDS_ENABLED){
       for (int i=il; i<=iu+1; i++) {
 
         //std::cout<<std::endl<<"first loop "<< i << " " << j << " " << k << std::endl<<std::endl;
-        bx1f_bound(k,j,i) = (vector_potential_bound(2,k,j+1,i) - vector_potential_bound(2,k,j,i))/pcoord->dx2f(j) -
+        b_bound.x1f(k,j,i) = (vector_potential_bound(2,k,j+1,i) - vector_potential_bound(2,k,j,i))/pcoord->dx2f(j) -
                             (vector_potential_bound(1,k+1,j,i) - vector_potential_bound(1,k,j,i))/pcoord->dx3f(k);
       }}}
       for (int k=kl; k<=ku; k++) {
       for (int j=jl; j<=ju+1; j++) {
       for (int i=il; i<=iu; i++) {
         //std::cout<<std::endl<<"second loop "<< i << " " << j << " " << k << std::endl<<std::endl;
-        bx2f_bound(k,j,i) = (vector_potential_bound(0,k+1,j,i) - vector_potential_bound(0,k,j,i))/pcoord->dx3f(k) -
+        b_bound.x2f(k,j,i) = (vector_potential_bound(0,k+1,j,i) - vector_potential_bound(0,k,j,i))/pcoord->dx3f(k) -
                             (vector_potential_bound(2,k,j,i+1) - vector_potential_bound(2,k,j,i))/pcoord->dx1f(i);
       }}}
       for (int k=kl; k<=ku+1; k++) {
       for (int j=jl; j<=ju; j++) {
       for (int i=il; i<=iu; i++) {
         //std::cout<<std::endl<<"third loop "<< i << " " << j << " " << k << std::endl<<std::endl;
-        bx3f_bound(k,j,i) = (vector_potential_bound(1,k,j,i+1) - vector_potential_bound(1,k,j,i))/pcoord->dx1f(i) -
+        b_bound.x3f(k,j,i) = (vector_potential_bound(1,k,j,i+1) - vector_potential_bound(1,k,j,i))/pcoord->dx1f(i) -
                             (vector_potential_bound(0,k,j+1,i) - vector_potential_bound(0,k,j,i))/pcoord->dx2f(j);
        }}} 
 }
@@ -1419,291 +1411,7 @@ void bound_ijk(Coordinates *pcoord, int *i, int *j, int*k){
 
 
 
-/* Do nothing for Dirichlet Bounds */
- void Dirichlet_Boundary(MeshBlock *pmb, Coordinates *pco, AthenaArray<Real> &prim, FaceField &b,
-                    Real time, Real dt, int is, int ie, int js, int je, int ks, int ke){
-     
-     //if (is==2)fprintf(stderr,"den: %g %g is: %d %d %d %d %d %d \n",prim(IDN,ks,js,is-2),prim(IDN,ke,je,ie+2),is,ie,js,je,ks,ke);
 
-    //      if (pmb->block_size.x1min==pmb->pmy_mesh->mesh_size.x1min && pmb->block_size.x2min==pmb->pmy_mesh->mesh_size.x2min && 
-    //   pmb->block_size.x3min==pmb->pmy_mesh->mesh_size.x3min){
-
-    //       int i,j,k;
-
-    // for (int k=0; k<=1; ++k) {
-    // for (int j=0; j<=1; ++j) {
-    //   for (int i=0; i<=1; ++i) {
-
-    //   fprintf(stderr,"boundaries: x y z: %g %g %g \n prims: %g %g %g %g %g \n ijk: %d %d %d\n",pco->x1v(i),pco->x2v(j),pco->x3v(k),prim(IDN,k,j,i),prim(IVX,k,j,i),prim(IVY,k,j,i),prim(IVZ,k,j,i),
-    //     prim(IPR,k,j,i),i,j,k);
-    //     }}}
-    // }
-
-  return; 
- }
-
- //----------------------------------------------------------------------------------------
-//!\f: User-defined boundary Conditions: sets solution in ghost zones to initial values
-// 
-
-void DirichletInnerX1(MeshBlock *pmb,Coordinates *pco, AthenaArray<Real> &prim, FaceField &b,
-                 Real time, Real dt, int is, int ie, int js, int je, int ks, int ke, int ngh)
-{
-  Real x,y,z;
-  Real vx,vy,vz,p,rho;
-
-    // copy hydro variables into ghost zones
-  for (int n=0; n<(NHYDRO); ++n) {
-    for (int k=ks; k<=ke; ++k) {
-    for (int j=js; j<=je; ++j) {
-#pragma omp simd
-      for (int i=1; i<=ngh; ++i) {
-        prim(n,k,j,is-i) = pmb->ruser_meshblock_data[0](n,k,j,is-i);
-      }
-    }}
-  }
-
-  if (MAGNETIC_FIELDS_ENABLED) {
-    for (int k=ks; k<=ke; ++k) {
-    for (int j=js; j<=je; ++j) {
-#pragma omp simd
-      for (int i=1; i<=ngh; ++i) {
-        b.x1f(k,j,(is-i)) = pmb->ruser_meshblock_data[1](k,j,is-i);
-      }
-    }}
-
-    for (int k=ks; k<=ke; ++k) {
-    for (int j=js; j<=je+1; ++j) {
-#pragma omp simd
-      for (int i=1; i<=ngh; ++i) {
-        b.x2f(k,j,(is-i)) = pmb->ruser_meshblock_data[2](k,j,is-i);
-      }
-    }}
-
-    for (int k=ks; k<=ke+1; ++k) {
-    for (int j=js; j<=je; ++j) {
-#pragma omp simd
-      for (int i=1; i<=ngh; ++i) {
-        b.x3f(k,j,(is-i)) = pmb->ruser_meshblock_data[3](k,j,is-i);
-      }
-    }}
-  }
-  
-}
-
-void DirichletOuterX1(MeshBlock *pmb,Coordinates *pco, AthenaArray<Real> &prim, FaceField &b,
-                 Real time, Real dt, int is, int ie, int js, int je, int ks, int ke, int ngh)
-{
-  Real x,y,z;
-  Real vx,vy,vz,p,rho;
-  for (int n=0; n<(NHYDRO); ++n) {
-    for (int k=ks; k<=ke; ++k) {
-    for (int j=js; j<=je; ++j) {
-#pragma omp simd
-      for (int i=1; i<=ngh; ++i) {
-        prim(n,k,j,ie+i) = pmb->ruser_meshblock_data[0](n,k,j,ie+i);
-      }
-    }}
-  }
-
-  // copy face-centered magnetic fields into ghost zones
-  if (MAGNETIC_FIELDS_ENABLED) {
-    for (int k=ks; k<=ke; ++k) {
-    for (int j=js; j<=je; ++j) {
-#pragma omp simd
-      for (int i=1; i<=ngh; ++i) {
-        b.x1f(k,j,(ie+i+1)) = pmb->ruser_meshblock_data[1](k,j,(ie+i+1));
-      }
-    }}
-
-    for (int k=ks; k<=ke; ++k) {
-    for (int j=js; j<=je+1; ++j) {
-#pragma omp simd
-      for (int i=1; i<=ngh; ++i) {
-        b.x2f(k,j,(ie+i)) = pmb->ruser_meshblock_data[2](k,j,ie+i);
-      }
-    }}
-
-    for (int k=ks; k<=ke+1; ++k) {
-    for (int j=js; j<=je; ++j) {
-#pragma omp simd
-      for (int i=1; i<=ngh; ++i) {
-        b.x3f(k,j,(ie+i)) = pmb->ruser_meshblock_data[3](k,j,ie+i);
-      }
-    }}
-  }
-}
-
-void DirichletInnerX2(MeshBlock *pmb,Coordinates *pco, AthenaArray<Real> &prim, FaceField &b,
-                 Real time, Real dt, int is, int ie, int js, int je, int ks, int ke, int ngh)
-{
-  Real x,y,z;
-  Real vx,vy,vz,p,rho;
-  for (int n=0; n<(NHYDRO); ++n) {
-    for (int k=ks; k<=ke; ++k) {
-    for (int j=1; j<=ngh; ++j) {
-#pragma omp simd
-      for (int i=is; i<=ie; ++i) {
-        prim(n,k,js-j,i) = pmb->ruser_meshblock_data[0](n,k,js-j,i);
-      }
-    }}
-  }
-
-  // copy face-centered magnetic fields into ghost zones
-  if (MAGNETIC_FIELDS_ENABLED) {
-    for (int k=ks; k<=ke; ++k) {
-    for (int j=1; j<=ngh; ++j) {
-#pragma omp simd
-      for (int i=is; i<=ie+1; ++i) {
-        b.x1f(k,(js-j),i) = pmb->ruser_meshblock_data[1](k,js-j,i);
-      }
-    }}
-
-    for (int k=ks; k<=ke; ++k) {
-    for (int j=1; j<=ngh; ++j) {
-#pragma omp simd
-      for (int i=is; i<=ie; ++i) {
-        b.x2f(k,(js-j),i) = pmb->ruser_meshblock_data[2](k,js-j,i);
-      }
-    }}
-
-    for (int k=ks; k<=ke+1; ++k) {
-    for (int j=1; j<=ngh; ++j) {
-#pragma omp simd
-      for (int i=is; i<=ie; ++i) {
-        b.x3f(k,(js-j),i) = pmb->ruser_meshblock_data[3](k,js-j,i);
-      }
-    }}
-  }
-}
-
-void DirichletOuterX2(MeshBlock *pmb,Coordinates *pco, AthenaArray<Real> &prim, FaceField &b,
-                 Real time, Real dt, int is, int ie, int js, int je, int ks, int ke, int ngh)
-{
-  Real x,y,z;
-  for (int n=0; n<(NHYDRO); ++n) {
-    for (int k=ks; k<=ke; ++k) {
-    for (int j=1; j<=ngh; ++j) {
-#pragma omp simd
-      for (int i=is; i<=ie; ++i) {
-        prim(n,k,je+j,i) = pmb->ruser_meshblock_data[0](n,k,je+j,i);
-      }
-    }}
-  }
-
-  // copy face-centered magnetic fields into ghost zones
-  if (MAGNETIC_FIELDS_ENABLED) {
-    for (int k=ks; k<=ke; ++k) {
-    for (int j=1; j<=ngh; ++j) {
-#pragma omp simd
-      for (int i=is; i<=ie+1; ++i) {
-        b.x1f(k,(je+j  ),i) = pmb->ruser_meshblock_data[1](k,(je+j  ),i);
-      }
-    }}
-
-    for (int k=ks; k<=ke; ++k) {
-    for (int j=1; j<=ngh; ++j) {
-#pragma omp simd
-      for (int i=is; i<=ie; ++i) {
-        b.x2f(k,(je+j+1),i) = pmb->ruser_meshblock_data[2](k,(je+j+1),i);
-      }
-    }}
-
-    for (int k=ks; k<=ke+1; ++k) {
-    for (int j=1; j<=ngh; ++j) {
-#pragma omp simd
-      for (int i=is; i<=ie; ++i) {
-        b.x3f(k,(je+j  ),i) = pmb->ruser_meshblock_data[3](k,(je+j  ),i);
-      }
-    }}
-  }
-}
-
-void DirichletInnerX3(MeshBlock *pmb,Coordinates *pco, AthenaArray<Real> &prim, FaceField &b,
-                 Real time, Real dt, int is, int ie, int js, int je, int ks, int ke, int ngh)
-{
-  Real x,y,z;
-  Real vx,vy,vz,p,rho;
-  for (int n=0; n<(NHYDRO); ++n) {
-    for (int k=1; k<=ngh; ++k) {
-    for (int j=js; j<=je; ++j) {
-#pragma omp simd
-      for (int i=is; i<=ie; ++i) {
-        prim(n,ks-k,j,i) = pmb->ruser_meshblock_data[0](n,ks-k,j,i);
-      }
-    }}
-  }
-
-  // copy face-centered magnetic fields into ghost zones
-  if (MAGNETIC_FIELDS_ENABLED) {
-    for (int k=1; k<=ngh; ++k) {
-    for (int j=js; j<=je; ++j) {
-#pragma omp simd
-      for (int i=is; i<=ie+1; ++i) {
-        b.x1f((ks-k),j,i) = pmb->ruser_meshblock_data[1](ks-k,j,i);
-      }
-    }}
-
-    for (int k=1; k<=ngh; ++k) {
-    for (int j=js; j<=je+1; ++j) {
-#pragma omp simd
-      for (int i=is; i<=ie; ++i) {
-        b.x2f((ks-k),j,i) = pmb->ruser_meshblock_data[2](ks-k,j,i);
-      }
-    }}
-
-    for (int k=1; k<=ngh; ++k) {
-    for (int j=js; j<=je; ++j) {
-#pragma omp simd
-      for (int i=is; i<=ie; ++i) {
-        b.x3f((ks-k),j,i) = pmb->ruser_meshblock_data[3](ks-k,j,i);
-      }
-    }}
-  }
-}
-
-void DirichletOuterX3(MeshBlock *pmb,Coordinates *pco, AthenaArray<Real> &prim, FaceField &b,
-                 Real time, Real dt, int is, int ie, int js, int je, int ks, int ke, int ngh)
-{
-  Real x,y,z;
-  Real vx,vy,vz,p,rho;
-  for (int n=0; n<(NHYDRO); ++n) {
-    for (int k=1; k<=ngh; ++k) {
-    for (int j=js; j<=je; ++j) {
-#pragma omp simd
-      for (int i=is; i<=ie; ++i) {
-        prim(n,ke+k,j,i) = pmb->ruser_meshblock_data[0](n,ke+k,j,i);
-      }
-    }}
-  }
-
-  // copy face-centered magnetic fields into ghost zones
-  if (MAGNETIC_FIELDS_ENABLED) {
-    for (int k=1; k<=ngh; ++k) {
-    for (int j=js; j<=je; ++j) {
-#pragma omp simd
-      for (int i=is; i<=ie+1; ++i) {
-        b.x1f((ke+k  ),j,i) = pmb->ruser_meshblock_data[1]((ke+k  ),j,i);
-      }
-    }}
-
-    for (int k=1; k<=ngh; ++k) {
-    for (int j=js; j<=je; ++j) {
-#pragma omp simd
-      for (int i=is; i<=ie; ++i) {
-        b.x2f((ke+k  ),j,i) = pmb->ruser_meshblock_data[2]((ke+k  ),j,i);
-      }
-    }}
-
-    for (int k=1; k<=ngh; ++k) {
-    for (int j=js; j<=je; ++j) {
-#pragma omp simd
-      for (int i=is; i<=ie; ++i) {
-        b.x3f((ke+k+1),j,i) = pmb->ruser_meshblock_data[3]((ke+k+1),j,i);
-      }
-    }}
-  }
-}
 
 int RefinementCondition(MeshBlock *pmb)
 {
@@ -2061,12 +1769,12 @@ void Mesh::InitUserMeshData(ParameterInput *pin)
 
 
 
-    if (pin->GetString("mesh","ix1_bc") == "user") EnrollUserBoundaryFunction(INNER_X1, DirichletInnerX1);
-    if (pin->GetString("mesh","ox1_bc") == "user") EnrollUserBoundaryFunction(OUTER_X1, DirichletOuterX1);
-    if (pin->GetString("mesh","ix2_bc") == "user") EnrollUserBoundaryFunction(INNER_X2, DirichletInnerX2);
-    if (pin->GetString("mesh","ox2_bc") == "user") EnrollUserBoundaryFunction(OUTER_X2, DirichletOuterX2);
-    if (pin->GetString("mesh","ix3_bc") == "user") EnrollUserBoundaryFunction(INNER_X3, DirichletInnerX3);
-    if (pin->GetString("mesh","ox3_bc") == "user") EnrollUserBoundaryFunction(OUTER_X3, DirichletOuterX3);
+    if (pin->GetString("mesh","ix1_bc") == "user") EnrollUserBoundaryFunction(BoundaryFace::inner_x1, FixedBoundary);
+    if (pin->GetString("mesh","ox1_bc") == "user") EnrollUserBoundaryFunction(BoundaryFace::outer_x1, FixedBoundary);
+    if (pin->GetString("mesh","ix2_bc") == "user") EnrollUserBoundaryFunction(BoundaryFace::inner_x2, FixedBoundary);
+    if (pin->GetString("mesh","ox2_bc") == "user") EnrollUserBoundaryFunction(BoundaryFace::outer_x2, FixedBoundary);
+    if (pin->GetString("mesh","ix3_bc") == "user") EnrollUserBoundaryFunction(BoundaryFace::inner_x3, FixedBoundary);
+    if (pin->GetString("mesh","ox3_bc") == "user") EnrollUserBoundaryFunction(BoundaryFace::outer_x3, FixedBoundary);
     
     if(adaptive==true) EnrollUserRefinementCondition(RefinementCondition);
 
@@ -2108,11 +1816,6 @@ void MeshBlock::InitUserMeshBlockData(ParameterInput *pin){
     int ncells2 = 1, ncells3 = 1;
     if (block_size.nx2 > 1) ncells2 = block_size.nx2 + 2*(NGHOST);
     if (block_size.nx3 > 1) ncells3 = block_size.nx3 + 2*(NGHOST);
-    AllocateRealUserMeshBlockDataField(4);
-    ruser_meshblock_data[0].NewAthenaArray(NHYDRO,ncells3,ncells2,ncells1);  //primitive bound
-    ruser_meshblock_data[1].NewAthenaArray(ncells3   , ncells2   ,(ncells1+1));
-    ruser_meshblock_data[2].NewAthenaArray( ncells3   ,(ncells2+1), ncells1   );
-    ruser_meshblock_data[3].NewAthenaArray((ncells3+1), ncells2   , ncells1   );
 
 
     
@@ -2157,13 +1860,6 @@ void MeshBlock::InitUserMeshBlockData(ParameterInput *pin){
     
     // init_cooling_tabs(cooling_file_name);
     // init_cooling();
-
-    std::string init_file_name;
-    init_file_name =  pin->GetOrAddString("problem","init_filename", "inits.in");
-
-    set_boundary_arrays(init_file_name,block_size,pcoord,is,ie,js,je,ks,ke,ruser_meshblock_data[0],
-      ruser_meshblock_data[1],ruser_meshblock_data[2],ruser_meshblock_data[3]);
-
 
   
     
@@ -2351,8 +2047,27 @@ void MeshBlock::ProblemGenerator(ParameterInput *pin)
     kl -= (NGHOST);
     ku += (NGHOST);
   }
+
+    std::string init_file_name;
+    AthenaArray<Real> w_inits;
+    FaceField b_inits;
+
+    int ncells1 = block_size.nx1 + 2*(NGHOST);
+    int ncells2 = 1, ncells3 = 1;
+    if (block_size.nx2 > 1) ncells2 = block_size.nx2 + 2*(NGHOST);
+    if (block_size.nx3 > 1) ncells3 = block_size.nx3 + 2*(NGHOST);
+    w_inits.NewAthenaArray(NHYDRO,ncells3,ncells2,ncells1);
+    b_inits.x1f.NewAthenaArray( ncells3   , ncells2   ,(ncells1+1));
+    b_inits.x2f.NewAthenaArray( ncells3   ,(ncells2+1), ncells1   );
+    b_inits.x3f.NewAthenaArray((ncells3+1), ncells2   , ncells1   );
+    //divb_array.NewAthenaArray(ncells3,ncells2,ncells1);
+    init_file_name =  pin->GetOrAddString("problem","init_filename", "inits.in");
+
+    set_boundary_arrays(init_file_name,block_size,pcoord,is,ie,js,je,ks,ke,w_inits,b_inits);
   Real pressure,b0,da,pa,ua,va,wa,bxa,bya,bza,x1,x2;
   Real T_dt,T_dmin,T_dmax;
+
+
 
 
 
@@ -2374,15 +2089,15 @@ void MeshBlock::ProblemGenerator(ParameterInput *pin)
   for (i=il; i<=iu; i++) {
 
         
-        da = ruser_meshblock_data[0](IDN,k,j,i);
-        ua = ruser_meshblock_data[0](IVX,k,j,i);
-        va = ruser_meshblock_data[0](IVY,k,j,i);
-        wa = ruser_meshblock_data[0](IVZ,k,j,i);
-        pa = ruser_meshblock_data[0](IPR,k,j,i);
+        da = w_inits(IDN,k,j,i);
+        ua = w_inits(IVX,k,j,i);
+        va = w_inits(IVY,k,j,i);
+        wa = w_inits(IVZ,k,j,i);
+        pa = w_inits(IPR,k,j,i);
 
-        bxa = ruser_meshblock_data[1](k,j,i);
-        bya = ruser_meshblock_data[2](k,j,i);
-        bza = ruser_meshblock_data[3](k,j,i);
+        bxa = b_inits.x1f(k,j,i);
+        bya = b_inits.x2f(k,j,i);
+        bza = b_inits.x3f(k,j,i);
 
 
       phydro->w(IDN,k,j,i) = da;
@@ -2431,7 +2146,10 @@ if (MAGNETIC_FIELDS_ENABLED){
  
   }}}
     
-
+  w_inits.DeleteAthenaArray();
+  b_inits.x1f.DeleteAthenaArray();
+  b_inits.x2f.DeleteAthenaArray();
+  b_inits.x3f.DeleteAthenaArray();
 
   UserWorkInLoop();
 

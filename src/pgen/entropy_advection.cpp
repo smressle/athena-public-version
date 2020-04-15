@@ -14,6 +14,8 @@
 #include <sstream>    // stringstream
 #include <stdexcept>  // runtime_error
 #include <string>     // c_str()
+#include <stdio.h>
+
 
 // Athena++ headers
 #include "../athena.hpp"
@@ -37,16 +39,57 @@ Real gm1,gem1,ge,g;
 } // namespace
 
  void electron_update(MeshBlock *pmb,const Real time, const Real dt,const AthenaArray<Real> &prim, const AthenaArray<Real> &bcc, AthenaArray<Real> &cons);
-
+void FixedBoundary1(MeshBlock *pmb, Coordinates *pcoord, AthenaArray<Real> &prim,
+                   FaceField &bb, Real time, Real dt,
+                   int il, int iu, int jl, int ju, int kl, int ku, int ngh);
+void FixedBoundary2(MeshBlock *pmb, Coordinates *pcoord, AthenaArray<Real> &prim,
+                   FaceField &bb, Real time, Real dt,
+                   int il, int iu, int jl, int ju, int kl, int ku, int ngh);
 //========================================================================================
 //! \fn void Mesh::InitUserMeshData(ParameterInput *pin)
 //========================================================================================
 
 void Mesh::InitUserMeshData(ParameterInput *pin) {
 
-    EnrollUserExplicitSourceFunction(electron_update);
+    //EnrollUserExplicitSourceFunction(electron_update);
+    if (pin->GetString("mesh","ix1_bc") == "user") EnrollUserBoundaryFunction(BoundaryFace::inner_x1, FixedBoundary1);
+    if (pin->GetString("mesh","ox1_bc") == "user") EnrollUserBoundaryFunction(BoundaryFace::outer_x1, FixedBoundary2);
 
 
+
+  return;
+}
+
+//----------------------------------------------------------------------------------------
+// Fixed boundary condition
+// Inputs:
+//   pmb: pointer to MeshBlock
+//   pcoord: pointer to Coordinates
+//   time,dt: current time and timestep of simulation
+//   is,ie,js,je,ks,ke: indices demarkating active region
+// Outputs:
+//   prim: primitives set in ghost zones
+//   bb: face-centered magnetic field set in ghost zones
+// Notes:
+//   does nothing
+
+void FixedBoundary1(MeshBlock *pmb, Coordinates *pcoord, AthenaArray<Real> &prim,
+                   FaceField &bb, Real time, Real dt,
+                   int is, int ie, int js, int je, int ks, int ke, int ngh) {
+
+    for (int k=ks; k<=ke; ++k) {
+    for (int j=js; j<=je; ++j) {
+#pragma omp simd
+      for (int i=1; i<=ngh; ++i) {
+        fprintf(stderr,"rho: %g ijk: %d %d %d \n", prim(IDN,k,j,is-i),i,j,k) ;
+        fprintf(stderr,"r: %g s: %g \n", pmb->pscalars->r(1,k,j,is-i), pmb->pscalars->s(1,k,j,is-i));
+      }
+    }}
+  return;
+}
+void FixedBoundary2(MeshBlock *pmb, Coordinates *pcoord, AthenaArray<Real> &prim,
+                   FaceField &bb, Real time, Real dt,
+                   int il, int iu, int jl, int ju, int kl, int ku, int ngh) {
   return;
 }
 
@@ -61,6 +104,7 @@ void MeshBlock::InitUserMeshBlockData(ParameterInput *pin) {
   return;
 }
 
+
 //========================================================================================
 //! \fn void MeshBlock::ProblemGenerator(ParameterInput *pin)
 
@@ -69,11 +113,26 @@ void MeshBlock::InitUserMeshBlockData(ParameterInput *pin) {
 void MeshBlock::ProblemGenerator(ParameterInput *pin) {
   AthenaArray<Real> vol(ncells1);
 
+   // Prepare index bounds
+  int il = is - NGHOST;
+  int iu = ie + NGHOST;
+  int jl = js;
+  int ju = je;
+  if (block_size.nx2 > 1) {
+    jl -= (NGHOST);
+    ju += (NGHOST);
+  }
+  int kl = ks;
+  int ku = ke;
+  if (block_size.nx3 > 1) {
+    kl -= (NGHOST);
+    ku += (NGHOST);
+  }
   // initialize conserved variables
-  for (int k=ks; k<=ke; k++) {
-    for (int j=js; j<=je; j++) {
-      pcoord->CellVolume(k, j, is, ie, vol);
-      for (int i=is; i<=ie; i++) {
+  for (int k=kl; k<=ku; k++) {
+    for (int j=jl; j<=ju; j++) {
+      pcoord->CellVolume(k, j, il, iu, vol);
+      for (int i=il; i<=iu; i++) {
         // background fluid:
 
 
@@ -88,6 +147,8 @@ void MeshBlock::ProblemGenerator(ParameterInput *pin) {
 
         if (x > xmid) v0 = -v0;
         phydro->u(IDN,k,j,i) = d0;
+        phydro->w(IDN,k,j,i) = d0;
+        phydro->w1(IDN,k,j,i) = d0;
         phydro->u(IM1,k,j,i) = d0*v0;
         phydro->u(IM2,k,j,i) = 0.0;
         phydro->u(IM3,k,j,i) = 0.0;
@@ -96,7 +157,11 @@ void MeshBlock::ProblemGenerator(ParameterInput *pin) {
 
         // set entropy
         if (NSCALARS > 0) pscalars->s(0,k,j,i) = p0/std::pow(d0,g); //total
-        if (NSCALARS > 1) pscalars->s(1,k,j,i) = p0/std::pow(d0,ge); //electron
+        if (NSCALARS > 1) {
+                pscalars->s(1,k,j,i) = d0 * p0/std::pow(d0,ge); //electron
+                pscalars->r(1,k,j,i) = p0/std::pow(d0,ge);
+
+        }
         
       }
     }
