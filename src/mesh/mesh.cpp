@@ -1413,7 +1413,7 @@ void Mesh::Initialize(int res_flag, ParameterInput *pin) {
       }
 
       // With AMR/SMR GR send primitives to enable cons->prim before prolongation
-      if (GENERAL_RELATIVITY && multilevel) {
+      if (GENERAL_RELATIVITY && multilevel ) {
         // prepare to receive primitives
 #pragma omp for private(pmb,pbval)
         for (int i=0; i<nmb; ++i) {
@@ -1428,6 +1428,7 @@ void Mesh::Initialize(int res_flag, ParameterInput *pin) {
           pmb->phydro->hbvar.SwapHydroQuantity(pmb->phydro->w,
                                                HydroBoundaryQuantity::prim);
           pmb->phydro->hbvar.SendBoundaryBuffers();
+          pmb->pscalars->sbvar.SendBoundaryBuffers();
         }
 
         // wait to receive AMR/SMR GR primitives
@@ -1435,6 +1436,7 @@ void Mesh::Initialize(int res_flag, ParameterInput *pin) {
         for (int i=0; i<nmb; ++i) {
           pmb = pmb_array[i]; pbval = pmb->pbval;
           pmb->phydro->hbvar.ReceiveAndSetBoundariesWithWait();
+          pmb->pscalars->sbvar.ReceiveAndSetBoundariesWithWait();
           pbval->ClearBoundary(BoundaryCommSubset::gr_amr);
           pmb->phydro->hbvar.SwapHydroQuantity(pmb->phydro->u,
                                                HydroBoundaryQuantity::cons);

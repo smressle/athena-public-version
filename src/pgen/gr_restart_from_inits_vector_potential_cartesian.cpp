@@ -38,6 +38,8 @@ namespace patch
 #include "../mesh/mesh.hpp"
 #include "../scalars/scalars.hpp"          // Passive scalars for electrons
 
+#include "../bvals/bvals.hpp"              // BoundaryValues
+
 
 
 /* cooling */
@@ -990,8 +992,6 @@ void apply_inner_boundary_condition(MeshBlock *pmb,AthenaArray<Real> &prim,Passi
 
 }}}
 
-g.DeleteAthenaArray();
-gi.DeleteAthenaArray();
 
 
 
@@ -1047,9 +1047,8 @@ void Mesh::InitUserMeshData(ParameterInput *pin)
 
 
   EnrollUserMetric(Cartesian_GR);
-
-  // EnrollUserRadSourceFunction(inner_boundary);
     
+    return;
     
 
 }
@@ -1092,7 +1091,7 @@ void MeshBlock::InitUserMeshBlockData(ParameterInput *pin){
     risco *= m;
 
   
-    
+    return;
     
 }
 
@@ -1170,11 +1169,12 @@ Real DivergenceB(MeshBlock *pmb, int iout)
 
 void MeshBlock::UserWorkInLoop(void)
 {
+
   // Create aliases for metric
   AthenaArray<Real> &g = ruser_meshblock_data[0], &gi = ruser_meshblock_data[1];
 
 
-  DivergenceB(pcoord->pmy_block,0);
+  //DivergenceB(pcoord->pmy_block,0);
 
   int il = is - NGHOST;
   int iu = ie + NGHOST;
@@ -1274,10 +1274,6 @@ void MeshBlock::ProblemGenerator(ParameterInput *pin)
 
     std::string init_file_name;
 
-    int ncells1 = block_size.nx1 + 2*(NGHOST);
-    int ncells2 = 1, ncells3 = 1;
-    if (block_size.nx2 > 1) ncells2 = block_size.nx2 + 2*(NGHOST);
-    if (block_size.nx3 > 1) ncells3 = block_size.nx3 + 2*(NGHOST);
     w_inits.NewAthenaArray(NHYDRO,ncells3,ncells2,ncells1);
     b_inits.x1f.NewAthenaArray( ncells3   , ncells2   ,(ncells1+1));
     b_inits.x2f.NewAthenaArray( ncells3   ,(ncells2+1), ncells1   );
@@ -1424,20 +1420,32 @@ gi.DeleteAthenaArray();
 
   // Calculate cell-centered magnetic field
   AthenaArray<Real> bb;
+  FaceField b_tmp;
   if (MAGNETIC_FIELDS_ENABLED) {
     pfield->CalculateCellCenteredField(pfield->b, pfield->bcc, pcoord, il, iu, jl, ju, kl,
         ku);
   } else {
     bb.NewAthenaArray(3, ku+1, ju+1, iu+1);
+    b_tmp.x1f.NewAthenaArray(ku+1, ju+1, iu+2);
+    b_tmp.x2f.NewAthenaArray(ku+1, ju+2, iu+1);
+    b_tmp.x3f.NewAthenaArray(ku+2, ju+1, iu+1);
   }
 
   // Initialize conserved values
   if (MAGNETIC_FIELDS_ENABLED) {
     peos->PrimitiveToConserved(phydro->w, pfield->bcc, phydro->u, pcoord, il, iu, jl, ju,
         kl, ku);
+    //apply floors
+    peos->ConservedToPrimitive(phydro->u, phydro->w, pfield->b,
+      phydro->w, pfield->bcc, pcoord,il, iu, jl, ju,kl, ku);
   } else {
     peos->PrimitiveToConserved(phydro->w, bb, phydro->u, pcoord, il, iu, jl, ju, kl, ku);
+    peos->ConservedToPrimitive(phydro->u, phydro->w, b_tmp,
+      phydro->w, bb, pcoord,il, iu, jl, ju,kl, ku);
     bb.DeleteAthenaArray();
+    b_tmp.x1f.DeleteAthenaArray();
+    b_tmp.x2f.DeleteAthenaArray();
+    b_tmp.x3f.DeleteAthenaArray();
   }
 
   UserWorkInLoop();
@@ -1448,12 +1456,12 @@ gi.DeleteAthenaArray();
   b_inits.x3f.DeleteAthenaArray();
 
 
-  init_electrons(pscalars, phydro, pfield,il, iu, jl, ju, kl, ku);
+  if (NSCALARS>0) init_electrons(pscalars, phydro, pfield,il, iu, jl, ju, kl, ku);
 
 
   ///exit(0);
 
-
+return;
   
 
 }
