@@ -43,7 +43,8 @@ namespace patch
 static int cooling;
 //static void integrate_cool(MeshBlock *pmb,const Real t, const Real dt_hydro, const AthenaArray<Real> &prim_old, AthenaArray<Real> &prim );
 static void inner_boundary(MeshBlock *pmb, const AthenaArray<Real> &prim_old, AthenaArray<Real> &prim, PassiveScalars *pscalars );
-
+void inner_boundary_source_function(MeshBlock *pmb, const Real time, const Real dt,
+  const AthenaArray<Real> &prim, const AthenaArray<Real> &bcc, AthenaArray<Real> &cons);
 static Real Lambda_T(const Real T);
 static Real Yinv(Real Y1);
 static Real Y(const Real T);
@@ -88,7 +89,6 @@ Real mu_highT = 0.5;
 Real mu_highT = 1./(2.*X + 3.*(1.-X-Z)/4. + Z/2.);  //mean molecular weight in proton masses
 #endif
 
- void cons_force(MeshBlock *pmb,const Real time, const Real dt,const AthenaArray<Real> &prim, const AthenaArray<Real> &bcc, AthenaArray<Real> &cons);
  void emf_source(MeshBlock *pmb,const Real time, const Real dt,const AthenaArray<Real> &prim,  const AthenaArray<Real> &bcc, const AthenaArray<Real> &cons, EdgeField &e);
  void star_update_function(MeshBlock *pmb,const Real time, const Real dt,const AthenaArray<Real> &prim, const AthenaArray<Real> &bcc, AthenaArray<Real> &cons);
  void apply_inner_boundary_condition(MeshBlock *pmb,AthenaArray<Real> &prim,PassiveScalars *pscalars);
@@ -176,11 +176,12 @@ Real fe_howes_(Real beta, Real sigma, Real Ttot ,Real Te);
 Real fe_werner_(Real beta, Real sigma, Real Ttot ,Real Te);
 Real fe_rowan_(Real beta, Real sigma_w, Real Ttot ,Real Te);
 Real gem1,ge,gamma_adi;
+Real Te_over_Ttot_init = 1.0;
+
 
 void init_electrons(PassiveScalars *pscalars, Hydro *phydro, Field *pfield,
   int il, int iu, int jl, int ju, int kl, int ku){
 
-  Real Te_over_Ttot_init = 1.0;
   for (int k=kl; k<=ku; ++k) {
     for (int j=jl; j<=ju; ++j) {
       for (int i=il; i<=iu; ++i) {
@@ -697,6 +698,7 @@ void FixedBoundary(MeshBlock *pmb, Coordinates *pcoord, AthenaArray<Real> &prim,
                    int is, int ie, int js, int je, int ks, int ke, int ngh) {
   return;
 }
+
 
 static void inner_boundary(MeshBlock *pmb, const AthenaArray<Real> &prim_old, AthenaArray<Real> &prim ,PassiveScalars *pscalars)
 {
@@ -1778,7 +1780,7 @@ void Mesh::InitUserMeshData(ParameterInput *pin)
     
     if(adaptive==true) EnrollUserRefinementCondition(RefinementCondition);
 
-
+     //EnrollUserExplicitSourceFunction(inner_boundary_source_function);
     //EnrollUserRadSourceFunction(integrate_cool);
     
     int i = 0;
@@ -1904,6 +1906,33 @@ Real DivergenceB(MeshBlock *pmb, int iout)
   return divb;
 }
 
+
+void MeshBlock::pmb->UserWorkInSubCycle(void)
+{
+  int il = is - NGHOST;
+  int iu = ie + NGHOST;
+  int jl = js;
+  int ju = je;
+  if (block_size.nx2 > 1) {
+    jl -= (NGHOST);
+    ju += (NGHOST);
+  }
+  int kl = ks;
+  int ku = ke;
+  if (block_size.nx3 > 1) {
+    kl -= (NGHOST);
+    ku += (NGHOST);
+  }
+
+
+      inner_boundary(pcoord->pmy_block, phydro->w1, phydro->w,pscalars );
+      peos->PrimitiveToConserved(phydro->w, pfield->bcc, phydro->u, pcoord, il, iu, jl, ju, kl, ku);
+      if (NSCALARS>0) peos->PassiveScalarPrimitiveToConserved(pscalars->r, phydro->u, pscalars->s, pcoord,il, iu, jl, ju, kl, ku);
+
+
+}
+
+
 void MeshBlock::UserWorkInLoop(void)
 {
 
@@ -2014,9 +2043,10 @@ void MeshBlock::UserWorkInLoop(void)
   }
 
 
+//These should be in usersourcterm
 
       if (NSCALARS>0) electron_update(pcoord, peos, phydro, pfield, pscalars, is, ie, js, je, ks, ke );
-      inner_boundary(pcoord->pmy_block, phydro->w1, phydro->w,pscalars );
+      // inner_boundary(pcoord->pmy_block, phydro->w1, phydro->w,pscalars );
       peos->PrimitiveToConserved(phydro->w, pfield->bcc, phydro->u, pcoord, il, iu, jl, ju, kl, ku);
       if (NSCALARS>0) peos->PassiveScalarPrimitiveToConserved(pscalars->r, phydro->u, pscalars->s, pcoord,il, iu, jl, ju, kl, ku);
 
@@ -2151,6 +2181,7 @@ if (MAGNETIC_FIELDS_ENABLED){
   b_inits.x2f.DeleteAthenaArray();
   b_inits.x3f.DeleteAthenaArray();
 
+  UserWorkInSubCycle():
   UserWorkInLoop();
 
   if (NSCALARS>0) init_electrons(pscalars, phydro, pfield,il, iu, jl, ju, kl, ku);

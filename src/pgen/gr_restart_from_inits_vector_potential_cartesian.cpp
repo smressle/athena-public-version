@@ -298,6 +298,7 @@ void electron_update(Coordinates *pcoord, EquationOfState *peos, Hydro *phydro, 
 
         Real s_actual = phydro->u(IDN,k,j,i) * r_actual;
 
+        //heating rate...never actually used
         //Real Q = std::pow(dh,gm1)/gm1 * (s_actual - pmb->pscalars->s(0,k,j,i))/dt;
 
         //Variables needed for fe
@@ -1476,8 +1477,9 @@ void Cartesian_GR(Real x1, Real x2, Real x3, ParameterInput *pin,
   Real y = x2;
   Real z = x3;
 
-  Real a_spin = a; //-a;
-
+  a = pin->GetReal("coord", "a");
+  Real a_spin =a;
+  
   Real SMALL = 1e-5;
   if (std::fabs(z)<SMALL) z= SMALL;
   Real R = std::sqrt(SQR(x) + SQR(y) + SQR(z));

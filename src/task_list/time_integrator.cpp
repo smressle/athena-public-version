@@ -1139,6 +1139,7 @@ TaskStatus TimeIntegratorTaskList::PhysicalBoundary(MeshBlock *pmb, int stage) {
 
 
 TaskStatus TimeIntegratorTaskList::UserWork(MeshBlock *pmb, int stage) {
+  pmb->UserWorkInSubCycle();
   if (stage != nstages) return TaskStatus::success; // only do on last stage
 
   pmb->UserWorkInLoop();
