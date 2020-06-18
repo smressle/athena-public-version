@@ -43,8 +43,8 @@ namespace patch
 static int cooling;
 //static void integrate_cool(MeshBlock *pmb,const Real t, const Real dt_hydro, const AthenaArray<Real> &prim_old, AthenaArray<Real> &prim );
 static void inner_boundary(MeshBlock *pmb, const AthenaArray<Real> &prim_old, AthenaArray<Real> &prim, PassiveScalars *pscalars );
-void inner_boundary_source_function(MeshBlock *pmb, const Real time, const Real dt,
-  const AthenaArray<Real> &prim, const AthenaArray<Real> &bcc, AthenaArray<Real> &cons);
+void inner_boundary_source_function(MeshBlock *pmb, const Real time, const Real dt, const AthenaArray<Real> *flux,
+  const AthenaArray<Real> &prim_old,  AthenaArray<Real> &prim, AthenaArray<Real> &prim_scalar);
 static Real Lambda_T(const Real T);
 static Real Yinv(Real Y1);
 static Real Y(const Real T);
@@ -91,7 +91,7 @@ Real mu_highT = 1./(2.*X + 3.*(1.-X-Z)/4. + Z/2.);  //mean molecular weight in p
 
  void emf_source(MeshBlock *pmb,const Real time, const Real dt,const AthenaArray<Real> &prim,  const AthenaArray<Real> &bcc, const AthenaArray<Real> &cons, EdgeField &e);
  void star_update_function(MeshBlock *pmb,const Real time, const Real dt,const AthenaArray<Real> &prim, const AthenaArray<Real> &bcc, AthenaArray<Real> &cons);
- void apply_inner_boundary_condition(MeshBlock *pmb,AthenaArray<Real> &prim,PassiveScalars *pscalars);
+ void apply_inner_boundary_condition(MeshBlock *pmb,AthenaArray<Real> &prim,AthenaArray<Real> &r);
  void FixedBoundary(MeshBlock *pmb, Coordinates *pco, AthenaArray<Real> &prim, FaceField &b,
                     Real time, Real dt, int is, int ie, int js, int je, int ks, int ke);
 void interp_inits(const Real x, const Real y, const Real z, Real *rho, Real *vx, Real *vy, Real *vz, Real *p);
@@ -700,6 +700,47 @@ void FixedBoundary(MeshBlock *pmb, Coordinates *pcoord, AthenaArray<Real> &prim,
 }
 
 
+void inner_boundary_source_function(MeshBlock *pmb, const Real time, const Real dt, const AthenaArray<Real> *flux,
+  const AthenaArray<Real> &prim_old,  AthenaArray<Real> &prim, AthenaArray<Real> &prim_scalar){
+  int i, j, k, dk;
+  int is, ie, js, je, ks, ke;
+
+  js = pmb->js;  je = pmb->je;
+  ks = pmb->ks;  ke = pmb->ke;
+  Real igm1 = 1.0/(gm1);
+  Real gamma = gm1+1.;
+
+  //pmb->peos->ConservedToPrimitive(cons, prim_old, pmb->pfield->b, prim, pmb->pfield->bcc,
+           //pmb->pcoord, pmb->is, pmb->ie, pmb->js, pmb->je, pmb->ks, pmb->ke);
+
+
+  
+  for (k=ks; k<=ke; k++) {
+    for (j=js; j<=je; j++) {
+      for (i=is; i<=ie; i++) {
+
+
+        Real v_s = sqrt(gamma*prim(IPR,k,j,i)/prim(IDN,k,j,i));
+
+        if (v_s>cs_max) v_s = cs_max;
+        if ( fabs(prim(IVX,k,j,i)) > cs_max) prim(IVX,k,j,i) = cs_max * ( (prim(IVX,k,j,i) >0) - (prim(IVX,k,j,i)<0) ) ;
+        if ( fabs(prim(IVY,k,j,i)) > cs_max) prim(IVY,k,j,i) = cs_max * ( (prim(IVY,k,j,i) >0) - (prim(IVY,k,j,i)<0) ) ;
+        if ( fabs(prim(IVZ,k,j,i)) > cs_max) prim(IVZ,k,j,i) = cs_max * ( (prim(IVZ,k,j,i) >0) - (prim(IVZ,k,j,i)<0) ) ;
+
+         prim(IPR,k,j,i) = SQR(v_s) *prim(IDN,k,j,i)/gamma ;
+          
+      }
+    }
+  }
+
+
+
+
+
+  apply_inner_boundary_condition(pmb,prim,prim_scalar);
+
+}
+
 static void inner_boundary(MeshBlock *pmb, const AthenaArray<Real> &prim_old, AthenaArray<Real> &prim ,PassiveScalars *pscalars)
 {
   int i, j, k, dk;
@@ -767,7 +808,7 @@ static void inner_boundary(MeshBlock *pmb, const AthenaArray<Real> &prim_old, At
 
 
 
-  apply_inner_boundary_condition(pmb,prim,pscalars);
+  apply_inner_boundary_condition(pmb,prim,pscalars->r);
 
 
 
@@ -1485,7 +1526,7 @@ int RefinementCondition(MeshBlock *pmb)
 
 /* Apply inner "inflow" boundary conditions */
 
-void apply_inner_boundary_condition(MeshBlock *pmb,AthenaArray<Real> &prim, PassiveScalars *pscalars){
+void apply_inner_boundary_condition(MeshBlock *pmb,AthenaArray<Real> &prim, AthenaArray<Real> &r_scalar){
 
 
   Real v_ff = std::sqrt(2.*gm_/(r_inner_boundary+SMALL));
@@ -1538,10 +1579,10 @@ void apply_inner_boundary_condition(MeshBlock *pmb,AthenaArray<Real> &prim, Pass
               pmb->user_out_var(16,k,j,i) += bsq/bsq_rho_ceiling - prim(IDN,k,j,i);
               prim(IDN,k,j,i) = bsq/bsq_rho_ceiling;
 
-              if (NSCALARS>0)pscalars->r(0,k,j,i) = prim(IPR,k,j,i)/std::pow(prim(IDN,k,j,i),gamma_adi);
-              if (NSCALARS>1)pscalars->r(1,k,j,i) = 0.1 * prim(IPR,k,j,i)/std::pow(prim(IDN,k,j,i),ge);
-              if (NSCALARS>2)pscalars->r(2,k,j,i) = 0.1 * prim(IPR,k,j,i)/std::pow(prim(IDN,k,j,i),ge);
-              if (NSCALARS>3)pscalars->r(3,k,j,i) = 0.1 * prim(IPR,k,j,i)/std::pow(prim(IDN,k,j,i),ge);
+              if (NSCALARS>0)r_scalar(0,k,j,i) = prim(IPR,k,j,i)/std::pow(prim(IDN,k,j,i),gamma_adi);
+              if (NSCALARS>1)r_scalar(1,k,j,i) = 0.1 * prim(IPR,k,j,i)/std::pow(prim(IDN,k,j,i),ge);
+              if (NSCALARS>2)r_scalar(2,k,j,i) = 0.1 * prim(IPR,k,j,i)/std::pow(prim(IDN,k,j,i),ge);
+              if (NSCALARS>3)r_scalar(3,k,j,i) = 0.1 * prim(IPR,k,j,i)/std::pow(prim(IDN,k,j,i),ge);
               
             
              }
@@ -1564,16 +1605,16 @@ void apply_inner_boundary_condition(MeshBlock *pmb,AthenaArray<Real> &prim, Pass
 
 
               if (NSCALARS>0){
-                pscalars->r(0,k,j,i) = prim(IPR,k,j,i)/std::pow(prim(IDN,k,j,i),gamma_adi);
+                r_scalar(0,k,j,i) = prim(IPR,k,j,i)/std::pow(prim(IDN,k,j,i),gamma_adi);
               }
               if (NSCALARS>1){
-                pscalars->r(1,k,j,i) = 0.1 * prim(IPR,k,j,i)/std::pow(prim(IDN,k,j,i),ge);
+                r_scalar(1,k,j,i) = 0.1 * prim(IPR,k,j,i)/std::pow(prim(IDN,k,j,i),ge);
               }
               if (NSCALARS>2){
-                pscalars->r(2,k,j,i) = 0.1 * prim(IPR,k,j,i)/std::pow(prim(IDN,k,j,i),ge);
+                r_scalar(2,k,j,i) = 0.1 * prim(IPR,k,j,i)/std::pow(prim(IDN,k,j,i),ge);
               }
               if (NSCALARS>3){
-                pscalars->r(3,k,j,i) = 0.1 * p_floor/std::pow(prim(IDN,k,j,i),ge);
+                r_scalar(3,k,j,i) = 0.1 * p_floor/std::pow(prim(IDN,k,j,i),ge);
               }
             
 
@@ -1781,7 +1822,7 @@ void Mesh::InitUserMeshData(ParameterInput *pin)
     if(adaptive==true) EnrollUserRefinementCondition(RefinementCondition);
 
      //EnrollUserExplicitSourceFunction(inner_boundary_source_function);
-    //EnrollUserRadSourceFunction(integrate_cool);
+    EnrollUserRadSourceFunction(inner_boundary_source_function);
     
     int i = 0;
     if (MAGNETIC_FIELDS_ENABLED){
@@ -1907,27 +1948,27 @@ Real DivergenceB(MeshBlock *pmb, int iout)
 }
 
 
-void MeshBlock::pmb->UserWorkInSubCycle(void)
+void MeshBlock::UserWorkInSubCycle(void)
 {
-  int il = is - NGHOST;
-  int iu = ie + NGHOST;
-  int jl = js;
-  int ju = je;
-  if (block_size.nx2 > 1) {
-    jl -= (NGHOST);
-    ju += (NGHOST);
-  }
-  int kl = ks;
-  int ku = ke;
-  if (block_size.nx3 > 1) {
-    kl -= (NGHOST);
-    ku += (NGHOST);
-  }
+//   int il = is - NGHOST;
+//   int iu = ie + NGHOST;
+//   int jl = js;
+//   int ju = je;
+//   if (block_size.nx2 > 1) {
+//     jl -= (NGHOST);
+//     ju += (NGHOST);
+//   }
+//   int kl = ks;
+//   int ku = ke;
+//   if (block_size.nx3 > 1) {
+//     kl -= (NGHOST);
+//     ku += (NGHOST);
+//   }
 
 
-      inner_boundary(pcoord->pmy_block, phydro->w1, phydro->w,pscalars );
-      peos->PrimitiveToConserved(phydro->w, pfield->bcc, phydro->u, pcoord, il, iu, jl, ju, kl, ku);
-      if (NSCALARS>0) peos->PassiveScalarPrimitiveToConserved(pscalars->r, phydro->u, pscalars->s, pcoord,il, iu, jl, ju, kl, ku);
+//       inner_boundary(pcoord->pmy_block, phydro->w1, phydro->w,pscalars );
+//       peos->PrimitiveToConserved(phydro->w, pfield->bcc, phydro->u, pcoord, il, iu, jl, ju, kl, ku);
+//       if (NSCALARS>0) peos->PassiveScalarPrimitiveToConserved(pscalars->r, phydro->u, pscalars->s, pcoord,il, iu, jl, ju, kl, ku);
 
 
 }
@@ -2181,7 +2222,7 @@ if (MAGNETIC_FIELDS_ENABLED){
   b_inits.x2f.DeleteAthenaArray();
   b_inits.x3f.DeleteAthenaArray();
 
-  UserWorkInSubCycle():
+  UserWorkInSubCycle();
   UserWorkInLoop();
 
   if (NSCALARS>0) init_electrons(pscalars, phydro, pfield,il, iu, jl, ju, kl, ku);

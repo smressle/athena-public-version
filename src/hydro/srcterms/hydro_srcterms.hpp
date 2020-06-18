@@ -36,6 +36,8 @@ class HydroSourceTerms {
 
   // data
   bool hydro_sourceterms_defined;
+  bool rad_sourceterms_defined;
+
 
   // functions
   void AddHydroSourceTerms(const Real time, const Real dt, const AthenaArray<Real> *flx,
@@ -43,6 +45,10 @@ class HydroSourceTerms {
                            const AthenaArray<Real> &prim_scalar,
                            const AthenaArray<Real> &b, AthenaArray<Real> &cons,
                            AthenaArray<Real> &cons_scalar);
+  void AddRadSourceTerms(const Real time, const Real dt, const AthenaArray<Real> *flux,
+                          const AthenaArray<Real> &prim_old,
+                          AthenaArray<Real> &prim,
+                          AthenaArray<Real> &r);
   void PointMass(const Real dt, const AthenaArray<Real> *flx,const AthenaArray<Real> &p,
                  AthenaArray<Real> &c);
   void ConstantAcceleration(const Real dt, const AthenaArray<Real> *flx,
@@ -55,7 +61,11 @@ class HydroSourceTerms {
   void SelfGravity(const Real dt, const AthenaArray<Real> *flx,
                    const AthenaArray<Real> &p, AthenaArray<Real> &c);
   void EnrollSrcTermFunction(SrcTermFunc my_func);
+  void EnrollRadSrcTermFunction(RadSrcTermFunc my_Func);
+
   SrcTermFunc UserSourceTerm;
+  RadSrcTermFunc UserRadSourceTerm;
+
 
  private:
   Hydro *pmy_hydro_;  // ptr to Hydro containing this HydroSourceTerms

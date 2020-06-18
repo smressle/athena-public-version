@@ -28,6 +28,8 @@
 HydroSourceTerms::HydroSourceTerms(Hydro *phyd, ParameterInput *pin) {
   pmy_hydro_ = phyd;
   hydro_sourceterms_defined = false;
+  rad_sourceterms_defined = false;
+
 
   // read point mass or constant acceleration parameters from input block
 
@@ -69,6 +71,9 @@ HydroSourceTerms::HydroSourceTerms(Hydro *phyd, ParameterInput *pin) {
 
   UserSourceTerm = phyd->pmy_block->pmy_mesh->UserSourceTerm_;
   if (UserSourceTerm != nullptr) hydro_sourceterms_defined = true;
+
+  UserRadSourceTerm = phyd->pmy_block->pmy_mesh->UserRadSourceTerm_;
+  if(UserRadSourceTerm != NULL) rad_sourceterms_defined = true;
 }
 
 //----------------------------------------------------------------------------------------
@@ -102,6 +107,22 @@ void HydroSourceTerms::AddHydroSourceTerms(const Real time, const Real dt,
   if (UserSourceTerm != nullptr) {
     UserSourceTerm(pmb, time, dt, prim, prim_scalar, bcc, cons, cons_scalar);
   }
+
+  return;
+}
+
+//----------------------------------------------------------------------------------------
+//! \fn void HydroSourceTerms::AddHydroSourceTerms
+//  \brief Adds source terms to conserved variables
+
+void HydroSourceTerms::AddRadSourceTerms(const Real time, const Real dt, const AthenaArray<Real> *flux,
+  const AthenaArray<Real> &prim_old,AthenaArray<Real> &prim,AthenaArray<Real> &r)
+{
+  MeshBlock *pmb = pmy_hydro_->pmy_block;
+
+  //  user-defined source terms
+  if (UserRadSourceTerm != NULL)
+    UserRadSourceTerm(pmb, time,dt,flux,prim_old,prim,r);
 
   return;
 }

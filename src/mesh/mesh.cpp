@@ -570,7 +570,7 @@ Mesh::Mesh(ParameterInput *pin, IOWrapper& resfile, int mesh_test) :
     MeshGenerator_{UniformMeshGeneratorX1, UniformMeshGeneratorX2,
                    UniformMeshGeneratorX3},
     BoundaryFunction_{nullptr, nullptr, nullptr, nullptr, nullptr, nullptr},
-    AMRFlag_{}, UserSourceTerm_{}, UserTimeStep_{}, ViscosityCoeff_{},
+    AMRFlag_{}, UserSourceTerm_{}, UserRadSourceTerm_{}, UserTimeStep_{}, ViscosityCoeff_{},
     ConductionCoeff_{}, FieldDiffusivity_{},
     MGGravityBoundaryFunction_{MGPeriodicInnerX1, MGPeriodicOuterX1, MGPeriodicInnerX2,
                         MGPeriodicOuterX2, MGPeriodicInnerX3, MGPeriodicOuterX3} {
@@ -1198,6 +1198,15 @@ void Mesh::EnrollUserExplicitSourceFunction(SrcTermFunc my_func) {
 }
 
 //----------------------------------------------------------------------------------------
+//! \fn void Mesh::EnrollUserRadExplicitSourceFunction(RadSrcTermFunc_t my_func)
+//  \brief Enroll a user-defined cooling function
+
+void Mesh::EnrollUserRadSourceFunction(RadSrcTermFunc my_func)
+{
+  UserRadSourceTerm_ = my_func;
+  return;
+}
+//----------------------------------------------------------------------------------------
 //! \fn void Mesh::EnrollUserTimeStepFunction(TimeStepFunc my_func)
 //  \brief Enroll a user-defined time step function
 
@@ -1428,7 +1437,7 @@ void Mesh::Initialize(int res_flag, ParameterInput *pin) {
           pmb->phydro->hbvar.SwapHydroQuantity(pmb->phydro->w,
                                                HydroBoundaryQuantity::prim);
           pmb->phydro->hbvar.SendBoundaryBuffers();
-          pmb->pscalars->sbvar.SendBoundaryBuffers();
+          if (NSCALARS > 0) pmb->pscalars->sbvar.SendBoundaryBuffers();
         }
 
         // wait to receive AMR/SMR GR primitives
@@ -1436,7 +1445,7 @@ void Mesh::Initialize(int res_flag, ParameterInput *pin) {
         for (int i=0; i<nmb; ++i) {
           pmb = pmb_array[i]; pbval = pmb->pbval;
           pmb->phydro->hbvar.ReceiveAndSetBoundariesWithWait();
-          pmb->pscalars->sbvar.ReceiveAndSetBoundariesWithWait();
+          if (NSCALARS > 0) pmb->pscalars->sbvar.ReceiveAndSetBoundariesWithWait();
           pbval->ClearBoundary(BoundaryCommSubset::gr_amr);
           pmb->phydro->hbvar.SwapHydroQuantity(pmb->phydro->u,
                                                HydroBoundaryQuantity::cons);
