@@ -893,7 +893,13 @@ enum TaskStatus TimeIntegratorTaskList::RadSourceTerms(MeshBlock *pmb, int stage
                                                    pmb->pcoord, is, ie, js, je, ks, ke);
     }
 
-    ph->hsrc.AddRadSourceTerms(t_start_stage,dt,ph->flux,ph->w,ph->w1,ps->r);
+    ph->hsrc.AddRadSourceTerms(t_start_stage,dt,ph->flux,
+      ph->u1,ph->u,
+      ph->w,ph->w1,
+      pf->b1,pf->b,
+      ps->s1,ps->s,
+      ps->r);
+
 
 
     /*update conservative vars*/

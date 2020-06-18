@@ -168,8 +168,11 @@ bool amr_increase_resolution; /* True if resolution is to be increased from rest
 
 
 // Electron functions and variables
-void electron_update(Coordinates *pcoord, EquationOfState *peos, Hydro *phydro, Field *pfield, 
-  PassiveScalars *pscalars, int is, int ie, int js, int je, int ks, int ke );
+void electron_update(Coordinates *pcoord, EquationOfState *peos, 
+  const AthenaArray<Real> &cons_old, AthenaArray<Real> &cons,
+  const AthenaArray<Real> &prim_old, AthenaArray<Real> &prim, const FaceField &bb_old,const FaceField &bb, 
+  const AthenaArray<Real> &s_old, AthenaArray<Real> &s_scalar, 
+  AthenaArray<Real> &r_scalar, int is, int ie, int js, int je, int ks, int ke );
 void init_electrons(PassiveScalars *pscalars, Hydro *phydro, Field *pfield,
   int il, int iu, int jl, int ju, int kl, int ku);
 Real fe_howes_(Real beta, Real sigma, Real Ttot ,Real Te);
@@ -281,13 +284,16 @@ Real fe_rowan_(Real beta, Real sigma_w, Real Ttot ,Real Te){
 
 }
 
-void electron_update(Coordinates *pcoord, EquationOfState *peos, Hydro *phydro, Field *pfield, 
-  PassiveScalars *pscalars, int is, int ie, int js, int je, int ks, int ke ) {
+//void electron_update(Coordinates *pcoord, EquationOfState *peos, Hydro *phydro, Field *pfield, 
+ // PassiveScalars *pscalars, int is, int ie, int js, int je, int ks, int ke ) {
+void electron_update(Coordinates *pcoord, EquationOfState *peos, const AthenaArray<Real> &cons_old, AthenaArray<Real> &cons,
+  const AthenaArray<Real> &prim_old, AthenaArray<Real> &prim, const FaceField &bb_old,const FaceField &bb, 
+  const AthenaArray<Real> &s_old, AthenaArray<Real> &s_scalar, AthenaArray<Real> &r_scalar, int is, int ie, int js, int je, int ks, int ke ) {
   // Create aliases for metric
 
 //not sure how to avoid this #if statement.  
 #if (GENERAL_RELATIVITY)
-  AthenaArray<Real> &g = phydro->pmy_block->ruser_meshblock_data[0],&gi = phydro->pmy_block->ruser_meshblock_data[1];
+  AthenaArray<Real> &g = pcoord->pmy_block->ruser_meshblock_data[0],&gi = pcoord->pmy_block->ruser_meshblock_data[1];
 #else
   AthenaArray<Real> g,gi; //should never be called
 #endif
@@ -302,19 +308,19 @@ void electron_update(Coordinates *pcoord, EquationOfState *peos, Hydro *phydro, 
 
   int il = is - NGHOST; int jl = js; int kl = ks;
   int iu = ie + NGHOST; int ju = je; int ku = ke;
-  if (phydro->pmy_block->ncells2>1) {
+  if (pcoord->pmy_block->ncells2>1) {
     jl -= NGHOST; ju += NGHOST;
   }
-  if (phydro->pmy_block->ncells3>1) {
+  if (pcoord->pmy_block->ncells3>1) {
     kl -= NGHOST; ku += NGHOST;
   }
 
 
   if (MAGNETIC_FIELDS_ENABLED) 
-    bcc1.NewAthenaArray(NFIELD, phydro->pmy_block->ncells3, phydro->pmy_block->ncells2, phydro->pmy_block->ncells1);
+    bcc1.NewAthenaArray(NFIELD, pcoord->pmy_block->ncells3, pcoord->pmy_block->ncells2, pcoord->pmy_block->ncells1);
 
 
-  pfield->CalculateCellCenteredField(pfield->b1, bcc1, pcoord, il, iu, jl, ju, kl, ku);
+  pcoord->pmy_block->pfield->CalculateCellCenteredField(bb_old, bcc1, pcoord, il, iu, jl, ju, kl, ku);
   // Go through all cells
   for (int k=ks; k<=ke; ++k) {
     for (int j=js; j<=je; ++j) {
@@ -324,9 +330,9 @@ void electron_update(Coordinates *pcoord, EquationOfState *peos, Hydro *phydro, 
         Real b_sqh;
         if (GENERAL_RELATIVITY){
           // Calculate normal-frame Lorentz factor at half time step
-          Real uu1 = phydro->w1(IM1,k,j,i);
-          Real uu2 = phydro->w1(IM2,k,j,i);
-          Real uu3 = phydro->w1(IM3,k,j,i);
+          Real uu1 = prim_old(IVX,k,j,i);
+          Real uu2 = prim_old(IVY,k,j,i);
+          Real uu3 = prim_old(IVZ,k,j,i);
           Real tmp = g(I11,i)*uu1*uu1 + 2.0*g(I12,i)*uu1*uu2 + 2.0*g(I13,i)*uu1*uu3
                      + g(I22,i)*uu2*uu2 + 2.0*g(I23,i)*uu2*uu3
                      + g(I33,i)*uu3*uu3;
@@ -365,29 +371,44 @@ void electron_update(Coordinates *pcoord, EquationOfState *peos, Hydro *phydro, 
           b_sqh = SQR(bcc1(IB1,k,j,i)) + SQR(bcc1(IB2,k,j,i)) + SQR(bcc1(IB3,k,j,i));
         }
 
-        Real dh = phydro->w1(IDN,k,j,i);
-        Real ph = phydro->w1(IPR,k,j,i);
-        Real pnew = phydro->w(IPR,k,j,i);
-        Real dnew = phydro->w(IDN,k,j,i);
+        Real dh = prim_old(IDN,k,j,i);
+        Real ph = prim_old(IPR,k,j,i);
+        Real pnew = prim(IPR,k,j,i);
+        Real dnew = prim(IDN,k,j,i);
         Real r_actual = pnew/std::pow(dnew,gamma_adi);
 
-        Real s_actual = phydro->u(IDN,k,j,i) * r_actual;
+        Real s_actual = cons(IDN,k,j,i) * r_actual;
 
         //Real Q = std::pow(dh,gm1)/gm1 * (s_actual - pmb->pscalars->s(0,k,j,i))/dt;
 
         //Variables needed for fe
 
-        Real s_old = pscalars->s1(1,k,j,i);
-        Real r_old = s_old/phydro->u1(IDN,k,j,i);
 
         Real beta = 2.0 * ph/(b_sqh + 1e-15);
         Real sigma = b_sqh/(dh);
         Real sigma_w = b_sqh/(dh + gamma_adi/gm1 * ph);
         Real Ttot = ph/dh;
+
+
+        Real se_old = s_old(1,k,j,i);
+        Real r_old = se_old/cons_old(IDN,k,j,i);
         Real Te   = r_old * std::pow(dh,ge) / dh;
 
         Real fe_howes = fe_howes_(beta,sigma, Ttot,Te);
+
+        if (NSCALARS>2)
+        {
+          se_old = s_old(2,k,j,i);
+          r_old = se_old/cons_old(IDN,k,j,i);
+          Te   = r_old * std::pow(dh,ge) / dh;
+        }
         Real fe_rowan = fe_rowan_(beta,sigma_w,Ttot,Te);
+        if (NSCALARS>3)
+        {
+          se_old = s_old(3,k,j,i);
+          r_old = se_old/cons_old(IDN,k,j,i);
+          Te   = r_old * std::pow(dh,ge) / dh;
+        }
         Real fe_werner = fe_werner_(beta,sigma,Ttot,Te);
         //Real fe = 0.5;
 
@@ -405,28 +426,28 @@ void electron_update(Coordinates *pcoord, EquationOfState *peos, Hydro *phydro, 
           // pscalars->s(1,k,j,i) = phydro->u(IDN,k,j,i) * pscalars->r(1,k,j,i);
 
 
-          pscalars->r(1,k,j,i) = 0.1 * pnew/std::pow(dnew,ge); //pe_old/std::pow(dnew,ge);
-          pscalars->s(1,k,j,i) = phydro->u(IDN,k,j,i) * pscalars->r(1,k,j,i);
+          r_scalar(1,k,j,i) = 0.1 * pnew/std::pow(dnew,ge); //pe_old/std::pow(dnew,ge);
+          s_scalar(1,k,j,i) = cons(IDN,k,j,i) * r_scalar(1,k,j,i);
           if (NSCALARS>2){
-            pscalars->r(2,k,j,i) = 0.1 * pnew/std::pow(dnew,ge); //pe_old/std::pow(dnew,ge);
-            pscalars->s(2,k,j,i) = phydro->u(IDN,k,j,i) * pscalars->r(2,k,j,i);
+            r_scalar(2,k,j,i) = 0.1 * pnew/std::pow(dnew,ge); //pe_old/std::pow(dnew,ge);
+            s_scalar(2,k,j,i) = cons(IDN,k,j,i) * r_scalar(2,k,j,i);
           }
           if (NSCALARS>3){
             //Real pe_old = pscalars->s1(3,k,j,i)/phydro->u1(IDN,k,j,i) *std::pow(dh,ge);
-            pscalars->r(3,k,j,i) = 0.1 * pnew/std::pow(dnew,ge);
-            pscalars->s(3,k,j,i) = phydro->u(IDN,k,j,i) * pscalars->r(3,k,j,i);
+            r_scalar(3,k,j,i) = 0.1 * pnew/std::pow(dnew,ge);
+            s_scalar(3,k,j,i) = cons(IDN,k,j,i) * r_scalar(3,k,j,i);
           }
         }
         else{ 
-          pscalars->r(1,k,j,i) +=  fe_howes * gem1/(gm1) * std::pow(dh,gamma_adi-ge) * (r_actual - pscalars->r(0,k,j,i));
-          pscalars->s(1,k,j,i) = pscalars->r(1,k,j,i) * phydro->u(IDN,k,j,i);
+          r_scalar(1,k,j,i) +=  fe_howes * gem1/(gm1) * std::pow(dh,gamma_adi-ge) * (r_actual - r_scalar(0,k,j,i));
+          s_scalar(1,k,j,i) = r_scalar(1,k,j,i) * cons(IDN,k,j,i);
           if (NSCALARS>2){
-            pscalars->r(2,k,j,i) +=  fe_rowan * gem1/(gm1) * std::pow(dh,gamma_adi-ge) * (r_actual - pscalars->r(0,k,j,i));
-            pscalars->s(2,k,j,i) = pscalars->r(2,k,j,i) * phydro->u(IDN,k,j,i);
+            r_scalar(2,k,j,i) +=  fe_rowan * gem1/(gm1) * std::pow(dh,gamma_adi-ge) * (r_actual - r_scalar(0,k,j,i));
+            s_scalar(2,k,j,i) = r_scalar(2,k,j,i) * cons(IDN,k,j,i);
           }
           if (NSCALARS>3){
-            pscalars->r(3,k,j,i) +=  fe_werner * gem1/(gm1) * std::pow(dh,gamma_adi-ge) * (r_actual - pscalars->r(0,k,j,i));
-            pscalars->s(3,k,j,i) = pscalars->r(3,k,j,i) * phydro->u(IDN,k,j,i);
+            r_scalar(3,k,j,i) +=  fe_werner * gem1/(gm1) * std::pow(dh,gamma_adi-ge) * (r_actual - r_scalar(0,k,j,i));
+            s_scalar(3,k,j,i) = r_scalar(3,k,j,i) * cons(IDN,k,j,i);
           }
         }
 
@@ -447,8 +468,8 @@ void electron_update(Coordinates *pcoord, EquationOfState *peos, Hydro *phydro, 
         // }
 
 
-        pscalars->s(0,k,j,i) = s_actual;
-        pscalars->r(0,k,j,i) = r_actual;
+        s_scalar(0,k,j,i) = s_actual;
+        r_scalar(0,k,j,i) = r_actual;
 
 
 
@@ -701,7 +722,10 @@ void FixedBoundary(MeshBlock *pmb, Coordinates *pcoord, AthenaArray<Real> &prim,
 
 
 void inner_boundary_source_function(MeshBlock *pmb, const Real time, const Real dt, const AthenaArray<Real> *flux,
-  const AthenaArray<Real> &prim_old,  AthenaArray<Real> &prim, AthenaArray<Real> &prim_scalar){
+  const AthenaArray<Real> &cons_old, AthenaArray<Real> &cons,
+  const AthenaArray<Real> &prim_old,  AthenaArray<Real> &prim, 
+  const FaceField &bb_old,const FaceField &bb,
+  const AthenaArray<Real> &s_old, AthenaArray<Real> &s_scalar, AthenaArray<Real> &prim_scalar){
   int i, j, k, dk;
   int is, ie, js, je, ks, ke;
 
@@ -713,7 +737,15 @@ void inner_boundary_source_function(MeshBlock *pmb, const Real time, const Real 
   //pmb->peos->ConservedToPrimitive(cons, prim_old, pmb->pfield->b, prim, pmb->pfield->bcc,
            //pmb->pcoord, pmb->is, pmb->ie, pmb->js, pmb->je, pmb->ks, pmb->ke);
 
+// Coordinates *pcoord, EquationOfState *peos, 
+//   const AthenaArray<Real> &cons_old, AthenaArray<Real> &cons,
+//   const AthenaArray<Real> &prim_old, AthenaArray<Real> &prim, const FaceField &bb_old,const FaceField &bb, 
+//   const AthenaArray<Real> &s_old, AthenaArray<Real> &s_scalar, 
+//   AthenaArray<Real> &r_scalar
 
+
+  if (NSCALARS>0) electron_update(pmb->pcoord, pmb->peos, cons_old, cons,prim_old, prim, 
+        bb_old,bb, s_old,s_scalar,prim_scalar, is, ie, js, je, ks, ke ) ;
   
   for (k=ks; k<=ke; k++) {
     for (j=js; j<=je; j++) {
@@ -2068,28 +2100,31 @@ void MeshBlock::UserWorkInLoop(void)
         }
     }
 
-  int il = is - NGHOST;
-  int iu = ie + NGHOST;
-  int jl = js;
-  int ju = je;
-  if (block_size.nx2 > 1) {
-    jl -= (NGHOST);
-    ju += (NGHOST);
-  }
-  int kl = ks;
-  int ku = ke;
-  if (block_size.nx3 > 1) {
-    kl -= (NGHOST);
-    ku += (NGHOST);
-  }
+//   int il = is - NGHOST;
+//   int iu = ie + NGHOST;
+//   int jl = js;
+//   int ju = je;
+//   if (block_size.nx2 > 1) {
+//     jl -= (NGHOST);
+//     ju += (NGHOST);
+//   }
+//   int kl = ks;
+//   int ku = ke;
+//   if (block_size.nx3 > 1) {
+//     kl -= (NGHOST);
+//     ku += (NGHOST);
+//   }
 
 
-//These should be in usersourcterm
+// //These should be in usersourcterm
 
-      if (NSCALARS>0) electron_update(pcoord, peos, phydro, pfield, pscalars, is, ie, js, je, ks, ke );
-      // inner_boundary(pcoord->pmy_block, phydro->w1, phydro->w,pscalars );
-      peos->PrimitiveToConserved(phydro->w, pfield->bcc, phydro->u, pcoord, il, iu, jl, ju, kl, ku);
-      if (NSCALARS>0) peos->PassiveScalarPrimitiveToConserved(pscalars->r, phydro->u, pscalars->s, pcoord,il, iu, jl, ju, kl, ku);
+//       //if (NSCALARS>0) electron_update(pcoord, peos, phydro, pfield, pscalars, is, ie, js, je, ks, ke );
+//       if (NSCALARS>0) electron_update(pcoord, peos, phydro->u1, phydro->u,phydro->w1, phydro->w, 
+//         pfield->b1,pfield->b, pscalars->s1,pscalars->s,pscalars->r, is, ie, js, je, ks, ke ) ;
+//   // Create aliases for metric
+//       // inner_boundary(pcoord->pmy_block, phydro->w1, phydro->w,pscalars );
+//       peos->PrimitiveToConserved(phydro->w, pfield->bcc, phydro->u, pcoord, il, iu, jl, ju, kl, ku);
+//       if (NSCALARS>0) peos->PassiveScalarPrimitiveToConserved(pscalars->r, phydro->u, pscalars->s, pcoord,il, iu, jl, ju, kl, ku);
 
 
 }

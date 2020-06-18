@@ -98,7 +98,15 @@ void __attribute__((weak)) MeshBlock::UserWorkInLoop() {
   // do nothing
   return;
 }
+//========================================================================================
+//! \fn void MeshBlock::UserWorkInSubCycle()
+//  \brief Function called once every subcycle for user-defined work.
+//========================================================================================
 
+void __attribute__((weak)) MeshBlock::UserWorkInSubCycle() {
+  // do nothing
+  return;
+}
 //========================================================================================
 //! \fn void MeshBlock::UserWorkBeforeOutput(ParameterInput *pin)
 //  \brief Function called before generating output files
