@@ -855,7 +855,7 @@ TaskStatus TimeIntegratorTaskList::AddSourceTermsHydro(MeshBlock *pmb, int stage
   }
   return TaskStatus::next;
 }
-enum TaskStatus TimeIntegratorTaskList::RadSourceTerms(MeshBlock *pmb, int stage)
+TaskStatus TimeIntegratorTaskList::RadSourceTerms(MeshBlock *pmb, int stage)
 {
   Hydro *ph=pmb->phydro;
   Field *pf=pmb->pfield;

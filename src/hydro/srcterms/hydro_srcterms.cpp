@@ -73,7 +73,7 @@ HydroSourceTerms::HydroSourceTerms(Hydro *phyd, ParameterInput *pin) {
   if (UserSourceTerm != nullptr) hydro_sourceterms_defined = true;
 
   UserRadSourceTerm = phyd->pmy_block->pmy_mesh->UserRadSourceTerm_;
-  if(UserRadSourceTerm != NULL) rad_sourceterms_defined = true;
+  if(UserRadSourceTerm != nullptr) rad_sourceterms_defined = true;
 }
 
 //----------------------------------------------------------------------------------------
@@ -125,7 +125,7 @@ void HydroSourceTerms::AddRadSourceTerms(const Real time, const Real dt, const A
   MeshBlock *pmb = pmy_hydro_->pmy_block;
 
   //  user-defined source terms
-  if (UserRadSourceTerm != NULL)
+  if (UserRadSourceTerm != nullptr)
     UserRadSourceTerm(pmb, time,dt,flux,cons_old,cons,prim_old,prim,bb_old,bb,s_old,s_scalar,r);
 
 

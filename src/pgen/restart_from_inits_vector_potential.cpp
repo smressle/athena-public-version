@@ -1854,7 +1854,7 @@ void Mesh::InitUserMeshData(ParameterInput *pin)
     if(adaptive==true) EnrollUserRefinementCondition(RefinementCondition);
 
      //EnrollUserExplicitSourceFunction(inner_boundary_source_function);
-    EnrollUserRadSourceFunction(inner_boundary_source_function);
+    //EnrollUserRadSourceFunction(inner_boundary_source_function);
     
     int i = 0;
     if (MAGNETIC_FIELDS_ENABLED){
@@ -2136,131 +2136,131 @@ void MeshBlock::UserWorkInLoop(void)
 */
 void MeshBlock::ProblemGenerator(ParameterInput *pin)
 {
-  int i=0,j=0,k=0;
+//   int i=0,j=0,k=0;
 
-   // Prepare index bounds
-  int il = is - NGHOST;
-  int iu = ie + NGHOST;
-  int jl = js;
-  int ju = je;
-  if (block_size.nx2 > 1) {
-    jl -= (NGHOST);
-    ju += (NGHOST);
-  }
-  int kl = ks;
-  int ku = ke;
-  if (block_size.nx3 > 1) {
-    kl -= (NGHOST);
-    ku += (NGHOST);
-  }
+//    // Prepare index bounds
+//   int il = is - NGHOST;
+//   int iu = ie + NGHOST;
+//   int jl = js;
+//   int ju = je;
+//   if (block_size.nx2 > 1) {
+//     jl -= (NGHOST);
+//     ju += (NGHOST);
+//   }
+//   int kl = ks;
+//   int ku = ke;
+//   if (block_size.nx3 > 1) {
+//     kl -= (NGHOST);
+//     ku += (NGHOST);
+//   }
 
-    std::string init_file_name;
-    AthenaArray<Real> w_inits;
-    FaceField b_inits;
+//     std::string init_file_name;
+//     AthenaArray<Real> w_inits;
+//     FaceField b_inits;
 
-    int ncells1 = block_size.nx1 + 2*(NGHOST);
-    int ncells2 = 1, ncells3 = 1;
-    if (block_size.nx2 > 1) ncells2 = block_size.nx2 + 2*(NGHOST);
-    if (block_size.nx3 > 1) ncells3 = block_size.nx3 + 2*(NGHOST);
-    w_inits.NewAthenaArray(NHYDRO,ncells3,ncells2,ncells1);
-    b_inits.x1f.NewAthenaArray( ncells3   , ncells2   ,(ncells1+1));
-    b_inits.x2f.NewAthenaArray( ncells3   ,(ncells2+1), ncells1   );
-    b_inits.x3f.NewAthenaArray((ncells3+1), ncells2   , ncells1   );
-    //divb_array.NewAthenaArray(ncells3,ncells2,ncells1);
-    init_file_name =  pin->GetOrAddString("problem","init_filename", "inits.in");
+//     int ncells1 = block_size.nx1 + 2*(NGHOST);
+//     int ncells2 = 1, ncells3 = 1;
+//     if (block_size.nx2 > 1) ncells2 = block_size.nx2 + 2*(NGHOST);
+//     if (block_size.nx3 > 1) ncells3 = block_size.nx3 + 2*(NGHOST);
+//     w_inits.NewAthenaArray(NHYDRO,ncells3,ncells2,ncells1);
+//     b_inits.x1f.NewAthenaArray( ncells3   , ncells2   ,(ncells1+1));
+//     b_inits.x2f.NewAthenaArray( ncells3   ,(ncells2+1), ncells1   );
+//     b_inits.x3f.NewAthenaArray((ncells3+1), ncells2   , ncells1   );
+//     //divb_array.NewAthenaArray(ncells3,ncells2,ncells1);
+//     init_file_name =  pin->GetOrAddString("problem","init_filename", "inits.in");
 
-    set_boundary_arrays(init_file_name,block_size,pcoord,is,ie,js,je,ks,ke,w_inits,b_inits);
-  Real pressure,b0,da,pa,ua,va,wa,bxa,bya,bza,x1,x2;
-  Real T_dt,T_dmin,T_dmax;
-
-
+//     set_boundary_arrays(init_file_name,block_size,pcoord,is,ie,js,je,ks,ke,w_inits,b_inits);
+//   Real pressure,b0,da,pa,ua,va,wa,bxa,bya,bza,x1,x2;
+//   Real T_dt,T_dmin,T_dmax;
 
 
 
-  Real gm1 = peos->GetGamma() - 1.0;
-  /* Set up a uniform medium */
-  /* For now, make the medium almost totally empty */
-  da = 1.0e-8;
-  pa = 1.0e-10;
-  ua = 0.0;
-  va = 0.0;
-  wa = 0.0;
-  bxa = 1e-4;
-  bya = 1e-4;
-  bza = 0.0;
-  Real x,y,z;
-
-  for (k=kl; k<=ku; k++) {
-  for (j=jl; j<=ju; j++) {
-  for (i=il; i<=iu; i++) {
-
-        
-        da = w_inits(IDN,k,j,i);
-        ua = w_inits(IVX,k,j,i);
-        va = w_inits(IVY,k,j,i);
-        wa = w_inits(IVZ,k,j,i);
-        pa = w_inits(IPR,k,j,i);
-
-        bxa = b_inits.x1f(k,j,i);
-        bya = b_inits.x2f(k,j,i);
-        bza = b_inits.x3f(k,j,i);
 
 
-      phydro->w(IDN,k,j,i) = da;
-      phydro->w(IVX,k,j,i) = ua;
-      phydro->w(IVY,k,j,i) = va;
-      phydro->w(IVZ,k,j,i) = wa;
-      phydro->w(IPR,k,j,i) = pa;
+//   Real gm1 = peos->GetGamma() - 1.0;
+//   /* Set up a uniform medium */
+//   /* For now, make the medium almost totally empty */
+//   da = 1.0e-8;
+//   pa = 1.0e-10;
+//   ua = 0.0;
+//   va = 0.0;
+//   wa = 0.0;
+//   bxa = 1e-4;
+//   bya = 1e-4;
+//   bza = 0.0;
+//   Real x,y,z;
+
+//   for (k=kl; k<=ku; k++) {
+//   for (j=jl; j<=ju; j++) {
+//   for (i=il; i<=iu; i++) {
 
         
+//         da = w_inits(IDN,k,j,i);
+//         ua = w_inits(IVX,k,j,i);
+//         va = w_inits(IVY,k,j,i);
+//         wa = w_inits(IVZ,k,j,i);
+//         pa = w_inits(IPR,k,j,i);
 
-    phydro->u(IDN,k,j,i) = da;
-    phydro->u(IM1,k,j,i) = da*ua;
-    phydro->u(IM2,k,j,i) = da*va;
-    phydro->u(IM3,k,j,i) = da*wa;
+//         bxa = b_inits.x1f(k,j,i);
+//         bya = b_inits.x2f(k,j,i);
+//         bza = b_inits.x3f(k,j,i);
 
-    for (int i_user=0;i_user<N_user_vars; i_user ++){
-      user_out_var(i_user,k,j,i) = 0;
-    }
 
-if (MAGNETIC_FIELDS_ENABLED){
-    pfield->b.x1f(k,j,i) = bxa;
-    pfield->b.x2f(k,j,i) = bya;
-    pfield->b.x3f(k,j,i) = bza;
-    pfield->bcc(IB1,k,j,i) = bxa;
-    pfield->bcc(IB2,k,j,i) = bya;
-    pfield->bcc(IB3,k,j,i) = bza;
-    if (i == ie) pfield->b.x1f(k,j,i+1) = bxa;
-    if (j == je) pfield->b.x2f(k,j+1,i) = bya;
-    if (k == ke) pfield->b.x3f(k+1,j,i) = bza;
+//       phydro->w(IDN,k,j,i) = da;
+//       phydro->w(IVX,k,j,i) = ua;
+//       phydro->w(IVY,k,j,i) = va;
+//       phydro->w(IVZ,k,j,i) = wa;
+//       phydro->w(IPR,k,j,i) = pa;
+
+        
+
+//     phydro->u(IDN,k,j,i) = da;
+//     phydro->u(IM1,k,j,i) = da*ua;
+//     phydro->u(IM2,k,j,i) = da*va;
+//     phydro->u(IM3,k,j,i) = da*wa;
+
+//     for (int i_user=0;i_user<N_user_vars; i_user ++){
+//       user_out_var(i_user,k,j,i) = 0;
+//     }
+
+// if (MAGNETIC_FIELDS_ENABLED){
+//     pfield->b.x1f(k,j,i) = bxa;
+//     pfield->b.x2f(k,j,i) = bya;
+//     pfield->b.x3f(k,j,i) = bza;
+//     pfield->bcc(IB1,k,j,i) = bxa;
+//     pfield->bcc(IB2,k,j,i) = bya;
+//     pfield->bcc(IB3,k,j,i) = bza;
+//     if (i == ie) pfield->b.x1f(k,j,i+1) = bxa;
+//     if (j == je) pfield->b.x2f(k,j+1,i) = bya;
+//     if (k == ke) pfield->b.x3f(k+1,j,i) = bza;
 
 
         
-}
+// }
 
-    pressure = pa;
-#ifndef ISOTHERMAL
-    phydro->u(IEN,k,j,i) = pressure/gm1;
-if (MAGNETIC_FIELDS_ENABLED){
-      phydro->u(IEN,k,j,i) +=0.5*(bxa*bxa + bya*bya + bza*bza);
-}
-     phydro->u(IEN,k,j,i) += 0.5*da*(ua*ua + va*va + wa*wa);
-#endif /* ISOTHERMAL */
+//     pressure = pa;
+// #ifndef ISOTHERMAL
+//     phydro->u(IEN,k,j,i) = pressure/gm1;
+// if (MAGNETIC_FIELDS_ENABLED){
+//       phydro->u(IEN,k,j,i) +=0.5*(bxa*bxa + bya*bya + bza*bza);
+// }
+//      phydro->u(IEN,k,j,i) += 0.5*da*(ua*ua + va*va + wa*wa);
+// #endif /* ISOTHERMAL */
 
-      if (RELATIVISTIC_DYNAMICS)  // this should only ever be SR with this file
-        phydro->u(IEN,k,j,i) += da;
+//       if (RELATIVISTIC_DYNAMICS)  // this should only ever be SR with this file
+//         phydro->u(IEN,k,j,i) += da;
  
-  }}}
+//   }}}
     
-  w_inits.DeleteAthenaArray();
-  b_inits.x1f.DeleteAthenaArray();
-  b_inits.x2f.DeleteAthenaArray();
-  b_inits.x3f.DeleteAthenaArray();
+//   w_inits.DeleteAthenaArray();
+//   b_inits.x1f.DeleteAthenaArray();
+//   b_inits.x2f.DeleteAthenaArray();
+//   b_inits.x3f.DeleteAthenaArray();
 
-  UserWorkInSubCycle();
-  UserWorkInLoop();
+//   UserWorkInSubCycle();
+//   UserWorkInLoop();
 
-  if (NSCALARS>0) init_electrons(pscalars, phydro, pfield,il, iu, jl, ju, kl, ku);
+//   if (NSCALARS>0) init_electrons(pscalars, phydro, pfield,il, iu, jl, ju, kl, ku);
 
   
 
