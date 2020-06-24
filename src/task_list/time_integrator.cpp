@@ -886,7 +886,7 @@ TaskStatus TimeIntegratorTaskList::RadSourceTerms(MeshBlock *pmb, int stage)
 
 
     //w contains old primitives, w1 is a placeholder array
-    pmb->peos->ConservedToPrimitive(ph->u, ph->w, pf->b, ph->w, pf->bcc,
+    pmb->peos->ConservedToPrimitive(ph->u, ph->w, pf->b, ph->w1, pf->bcc,
            pmb->pcoord, is,ie,js,je,ks,ke);
 
     if (NSCALARS > 0) {
@@ -896,7 +896,7 @@ TaskStatus TimeIntegratorTaskList::RadSourceTerms(MeshBlock *pmb, int stage)
 
     ph->hsrc.AddRadSourceTerms(t_start_stage,dt,ph->flux,
       ph->u1,ph->u,
-      ph->w1,ph->w,
+      ph->w,ph->w1,
       pf->b1,pf->b,
       ps->s1,ps->s,
       ps->r);
@@ -904,7 +904,7 @@ TaskStatus TimeIntegratorTaskList::RadSourceTerms(MeshBlock *pmb, int stage)
 
 
     /*update conservative vars*/
-    pmb->peos->PrimitiveToConserved(ph->w,pf->bcc, ph->u, pmb->pcoord,is,ie,js,je,ks,ke);
+    pmb->peos->PrimitiveToConserved(ph->w1,pf->bcc, ph->u, pmb->pcoord,is,ie,js,je,ks,ke);
     if (NSCALARS>0) pmb->peos->PassiveScalarPrimitiveToConserved(ps->r, ph->u, ps->s, pmb->pcoord,is, ie, js, je, ks, ke);
 
      
