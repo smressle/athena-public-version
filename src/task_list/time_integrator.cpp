@@ -274,7 +274,7 @@ TimeIntegratorTaskList::TimeIntegratorTaskList(ParameterInput *pin, Mesh *pm) {
     }
     AddTask(SEND_HYD,SRCTERM_RAD);
     AddTask(RECV_HYD,NONE);
-    AddTask(SETB_HYD,(RECV_HYD|SRCTERM_HYD));
+    AddTask(SETB_HYD,(RECV_HYD|SRCTERM_RAD));
     if (SHEARING_BOX) { // Shearingbox BC for Hydro
       AddTask(SEND_HYDSH,SETB_HYD);
       AddTask(RECV_HYDSH,SETB_HYD);
@@ -289,9 +289,9 @@ TimeIntegratorTaskList::TimeIntegratorTaskList(ParameterInput *pin, Mesh *pm) {
         AddTask(INT_SCLR,CALC_SCLRFLX);
       }
       // there is no SRCTERM_SCLR task
-      AddTask(SEND_SCLR,SRCTERM_HYD);
+      AddTask(SEND_SCLR,SRCTERM_RAD);
       AddTask(RECV_SCLR,NONE);
-      AddTask(SETB_SCLR,(RECV_SCLR|SRCTERM_HYD));
+      AddTask(SETB_SCLR,(RECV_SCLR|SRCTERM_RAD));
       // if (SHEARING_BOX) {
       //   AddTask(SEND_SCLRSH,SETB_SCLR);
       //   AddTask(RECV_SCLRSH,SETB_SCLR);
@@ -312,10 +312,11 @@ TimeIntegratorTaskList::TimeIntegratorTaskList(ParameterInput *pin, Mesh *pm) {
         AddTask(INT_FLD,RECV_FLDFLX);
       }
 
-      AddTask(SRCTERM_RAD,(INT_FLD|SRCTERM_HYD));
+      if (NSCALARS>0) AddTask(SRCTERM_RAD,(INT_FLD|SRCTERM_HYD|INT_SCLR));
+      else AddTask(SRCTERM_RAD,(INT_FLD|SRCTERM_HYD));
       AddTask(SEND_FLD,SRCTERM_RAD);
       AddTask(RECV_FLD,NONE);
-      AddTask(SETB_FLD,(RECV_FLD|INT_FLD));
+      AddTask(SETB_FLD,(RECV_FLD|SRCTERM_RAD));
       if (SHEARING_BOX) { // Shearingbox BC for Bfield
         AddTask(SEND_FLDSH,SETB_FLD);
         AddTask(RECV_FLDSH,SETB_FLD);
@@ -885,7 +886,7 @@ TaskStatus TimeIntegratorTaskList::RadSourceTerms(MeshBlock *pmb, int stage)
 
 
     //w contains old primitives, w1 is a placeholder array
-    pmb->peos->ConservedToPrimitive(ph->u, ph->w, pf->b, ph->w1, pf->bcc,
+    pmb->peos->ConservedToPrimitive(ph->u, ph->w, pf->b, ph->w, pf->bcc,
            pmb->pcoord, is,ie,js,je,ks,ke);
 
     if (NSCALARS > 0) {
@@ -895,7 +896,7 @@ TaskStatus TimeIntegratorTaskList::RadSourceTerms(MeshBlock *pmb, int stage)
 
     ph->hsrc.AddRadSourceTerms(t_start_stage,dt,ph->flux,
       ph->u1,ph->u,
-      ph->w,ph->w1,
+      ph->w1,ph->w,
       pf->b1,pf->b,
       ps->s1,ps->s,
       ps->r);
@@ -903,7 +904,7 @@ TaskStatus TimeIntegratorTaskList::RadSourceTerms(MeshBlock *pmb, int stage)
 
 
     /*update conservative vars*/
-    pmb->peos->PrimitiveToConserved(ph->w1,pf->bcc, ph->u, pmb->pcoord,is,ie,js,je,ks,ke);
+    pmb->peos->PrimitiveToConserved(ph->w,pf->bcc, ph->u, pmb->pcoord,is,ie,js,je,ks,ke);
     if (NSCALARS>0) pmb->peos->PassiveScalarPrimitiveToConserved(ps->r, ph->u, ps->s, pmb->pcoord,is, ie, js, je, ks, ke);
 
      
@@ -911,7 +912,7 @@ TaskStatus TimeIntegratorTaskList::RadSourceTerms(MeshBlock *pmb, int stage)
     return TaskStatus::fail;
   }
 
-  return TaskStatus::fail;
+  return TaskStatus::next;
 }
 //----------------------------------------------------------------------------------------
 // Functions to calculate hydro diffusion fluxes (stored in HydroDiffusion::visflx[],

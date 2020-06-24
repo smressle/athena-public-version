@@ -168,7 +168,7 @@ bool amr_increase_resolution; /* True if resolution is to be increased from rest
 
 
 // Electron functions and variables
-void electron_update(Coordinates *pcoord, EquationOfState *peos, 
+void electron_update(Coordinates *pcoord, EquationOfState *peos, Field *pfield,
   const AthenaArray<Real> &cons_old, AthenaArray<Real> &cons,
   const AthenaArray<Real> &prim_old, AthenaArray<Real> &prim, const FaceField &bb_old,const FaceField &bb, 
   const AthenaArray<Real> &s_old, AthenaArray<Real> &s_scalar, 
@@ -286,7 +286,8 @@ Real fe_rowan_(Real beta, Real sigma_w, Real Ttot ,Real Te){
 
 //void electron_update(Coordinates *pcoord, EquationOfState *peos, Hydro *phydro, Field *pfield, 
  // PassiveScalars *pscalars, int is, int ie, int js, int je, int ks, int ke ) {
-void electron_update(Coordinates *pcoord, EquationOfState *peos, const AthenaArray<Real> &cons_old, AthenaArray<Real> &cons,
+void electron_update(Coordinates *pcoord, EquationOfState *peos, Field *pfield,
+  const AthenaArray<Real> &cons_old, AthenaArray<Real> &cons,
   const AthenaArray<Real> &prim_old, AthenaArray<Real> &prim, const FaceField &bb_old,const FaceField &bb, 
   const AthenaArray<Real> &s_old, AthenaArray<Real> &s_scalar, AthenaArray<Real> &r_scalar, int is, int ie, int js, int je, int ks, int ke ) {
   // Create aliases for metric
@@ -320,7 +321,9 @@ void electron_update(Coordinates *pcoord, EquationOfState *peos, const AthenaArr
     bcc1.NewAthenaArray(NFIELD, pcoord->pmy_block->ncells3, pcoord->pmy_block->ncells2, pcoord->pmy_block->ncells1);
 
 
-  pcoord->pmy_block->pfield->CalculateCellCenteredField(bb_old, bcc1, pcoord, il, iu, jl, ju, kl, ku);
+  pfield->CalculateCellCenteredField(bb_old, bcc1, pcoord, is, ie, js, je, ks, ke);
+
+
   // Go through all cells
   for (int k=ks; k<=ke; ++k) {
     for (int j=js; j<=je; ++j) {
@@ -729,23 +732,20 @@ void inner_boundary_source_function(MeshBlock *pmb, const Real time, const Real 
   int i, j, k, dk;
   int is, ie, js, je, ks, ke;
 
+
+
+  is = pmb->is;  ie = pmb->ie;
   js = pmb->js;  je = pmb->je;
   ks = pmb->ks;  ke = pmb->ke;
   Real igm1 = 1.0/(gm1);
   Real gamma = gm1+1.;
 
-  //pmb->peos->ConservedToPrimitive(cons, prim_old, pmb->pfield->b, prim, pmb->pfield->bcc,
-           //pmb->pcoord, pmb->is, pmb->ie, pmb->js, pmb->je, pmb->ks, pmb->ke);
 
-// Coordinates *pcoord, EquationOfState *peos, 
-//   const AthenaArray<Real> &cons_old, AthenaArray<Real> &cons,
-//   const AthenaArray<Real> &prim_old, AthenaArray<Real> &prim, const FaceField &bb_old,const FaceField &bb, 
-//   const AthenaArray<Real> &s_old, AthenaArray<Real> &s_scalar, 
-//   AthenaArray<Real> &r_scalar
-
-
-  if (NSCALARS>0) electron_update(pmb->pcoord, pmb->peos, cons_old, cons,prim_old, prim, 
+  if (NSCALARS>1) electron_update(pmb->pcoord, pmb->peos, pmb->pfield,cons_old, cons,prim_old, prim, 
         bb_old,bb, s_old,s_scalar,prim_scalar, is, ie, js, je, ks, ke ) ;
+
+
+  // Real vmax = 0.0;
   
   for (k=ks; k<=ke; k++) {
     for (j=js; j<=je; j++) {
@@ -755,11 +755,15 @@ void inner_boundary_source_function(MeshBlock *pmb, const Real time, const Real 
         Real v_s = sqrt(gamma*prim(IPR,k,j,i)/prim(IDN,k,j,i));
 
         if (v_s>cs_max) v_s = cs_max;
-        if ( fabs(prim(IVX,k,j,i)) > cs_max) prim(IVX,k,j,i) = cs_max * ( (prim(IVX,k,j,i) >0) - (prim(IVX,k,j,i)<0) ) ;
-        if ( fabs(prim(IVY,k,j,i)) > cs_max) prim(IVY,k,j,i) = cs_max * ( (prim(IVY,k,j,i) >0) - (prim(IVY,k,j,i)<0) ) ;
-        if ( fabs(prim(IVZ,k,j,i)) > cs_max) prim(IVZ,k,j,i) = cs_max * ( (prim(IVZ,k,j,i) >0) - (prim(IVZ,k,j,i)<0) ) ;
+        if ( std::fabs(prim(IVX,k,j,i)) > cs_max) prim(IVX,k,j,i) = cs_max * ( (prim(IVX,k,j,i) >0) - (prim(IVX,k,j,i)<0) ) ;
+        if ( std::fabs(prim(IVY,k,j,i)) > cs_max) prim(IVY,k,j,i) = cs_max * ( (prim(IVY,k,j,i) >0) - (prim(IVY,k,j,i)<0) ) ;
+        if ( std::fabs(prim(IVZ,k,j,i)) > cs_max) prim(IVZ,k,j,i) = cs_max * ( (prim(IVZ,k,j,i) >0) - (prim(IVZ,k,j,i)<0) ) ;
 
          prim(IPR,k,j,i) = SQR(v_s) *prim(IDN,k,j,i)/gamma ;
+
+         // vmax = std::max(vmax,std::fabs(prim(IVX,k,j,i)));
+         // vmax = std::max(vmax,std::fabs(prim(IVY,k,j,i)));
+         // vmax = std::max(vmax,std::fabs(prim(IVZ,k,j,i)));
           
       }
     }
@@ -771,121 +775,11 @@ void inner_boundary_source_function(MeshBlock *pmb, const Real time, const Real 
 
   apply_inner_boundary_condition(pmb,prim,prim_scalar);
 
-}
+  // fprintf(stderr,"vmax in rad_source: %g \n",vmax);
 
-static void inner_boundary(MeshBlock *pmb, const AthenaArray<Real> &prim_old, AthenaArray<Real> &prim ,PassiveScalars *pscalars)
-{
-  int i, j, k, dk;
-  int is, ie, js, je, ks, ke;
-
-
-  ///apply_inner_boundary_condition(pmb,prim);
-
-  Real kbT_keV;
-  AthenaArray<Real> prim_before,cons;
-
-
-    // Allocate memory for primitive/conserved variables
-  int ncells1 = pmb->block_size.nx1 + 2*(NGHOST);
-  int ncells2 = 1, ncells3 = 1;
-  if (pmb->block_size.nx2 > 1) ncells2 = pmb->block_size.nx2 + 2*(NGHOST);
-  if (pmb->block_size.nx3 > 1) ncells3 = pmb->block_size.nx3 + 2*(NGHOST);
-  prim_before.NewAthenaArray(NHYDRO,ncells3,ncells2,ncells1);
-  cons.NewAthenaArray(NHYDRO,ncells3,ncells2,ncells1);
-  prim_before = prim;
-  // //prim.InitWithShallowCopy(pmb->phydro->w);
-
-  // /* ath_pout(0, "integrating cooling using Townsend (2009) algorithm.\n"); */
-
-  is = pmb->is;  ie = pmb->ie;
-  js = pmb->js;  je = pmb->je;
-  ks = pmb->ks;  ke = pmb->ke;
-  Real igm1 = 1.0/(gm1);
-  Real gamma = gm1+1.;
-
-  //pmb->peos->ConservedToPrimitive(cons, prim_old, pmb->pfield->b, prim, pmb->pfield->bcc,
-           //pmb->pcoord, pmb->is, pmb->ie, pmb->js, pmb->je, pmb->ks, pmb->ke);
-
-
-  
-  for (k=ks; k<=ke; k++) {
-    for (j=js; j<=je; j++) {
-      for (i=is; i<=ie; i++) {
-
-        /* find temp in keV */
-        // kbT_keV = mu_highT*mp_over_kev*(prim(IPR,k,j,i)/prim(IDN,k,j,i));
-        // // ath_pout(0, "temperature before = %e ", kbT_keV);
-        // kbT_keV = newtemp_townsend(prim(IDN,k,j,i), kbT_keV, dt_hydro);
-        // // ath_pout(0, "temperature after = %e \n", kbT_keV);
-        // // apply a temperature floor (nans tolerated) 
-        // if (isnan(kbT_keV) || kbT_keV < kbTfloor_kev)
-        //   kbT_keV = kbTfloor_kev;
-
-        // prim(IPR,k,j,i) = prim(IDN,k,j,i) * kbT_keV / (mu_highT * mp_over_kev);
-
-        Real v_s = sqrt(gamma*prim(IPR,k,j,i)/prim(IDN,k,j,i));
-
-        if (v_s>cs_max) v_s = cs_max;
-        if ( fabs(prim(IVX,k,j,i)) > cs_max) prim(IVX,k,j,i) = cs_max * ( (prim(IVX,k,j,i) >0) - (prim(IVX,k,j,i)<0) ) ;
-        if ( fabs(prim(IVY,k,j,i)) > cs_max) prim(IVY,k,j,i) = cs_max * ( (prim(IVY,k,j,i) >0) - (prim(IVY,k,j,i)<0) ) ;
-        if ( fabs(prim(IVZ,k,j,i)) > cs_max) prim(IVZ,k,j,i) = cs_max * ( (prim(IVZ,k,j,i) >0) - (prim(IVZ,k,j,i)<0) ) ;
-
-         prim(IPR,k,j,i) = SQR(v_s) *prim(IDN,k,j,i)/gamma ;
-       // cons(IEN,k,j,i) = prim(IPR,k,j,i)*igm1 + 0.5*prim(IDN,k,j,i)*( SQR(prim(IVX,k,j,i)) + SQR(prim(IVY,k,j,i)) + SQR(prim(IVZ,k,j,i)) );
-          
-      }
-    }
-  }
-
-
-
-
-  apply_inner_boundary_condition(pmb,prim,pscalars->r);
-
-
-
-      prim_before.DeleteAthenaArray();
-      cons.DeleteAthenaArray();
-  return;
 }
 
 
-
-/******************************************/
-/*        Some Vector Functions           */
-/******************************************/
-
-
-void cross(const AthenaArray<Real> &A , const AthenaArray<Real> &B, AthenaArray<Real> &result){
-    
-    result(0) = A(1)*B(2) - A(2)*B(1);
-    result(1) = A(2)*B(0) - A(0)*B(2);
-    result(2) = A(0)*B(1) - A(1)*B(0);
-    return;
-    
-}
-
-Real dot(const AthenaArray<Real> &A , const AthenaArray<Real> &B){
-    return A(0) * B(0) + A(1) * B(1) + A(2) * B(2);
-}
-
-Real norm_calc(const AthenaArray<Real> &A ){
-    return std::sqrt( SQR(A(0)) + SQR(A(1)) + SQR(A(2)) );
-}
-void norm_vector(AthenaArray<Real> &A){
-    Real norm = norm_calc(A);
-    for (int i=0; i<=2; ++i) A(i) *= 1./norm;
-    return;
-}
-
-void add_vectors(const int i_sign, const AthenaArray<Real> &A , const AthenaArray<Real> &B, AthenaArray<Real> &result){
-  for (int i=0; i<=2; ++i) result(i) = A(i) + i_sign* B(i);
-  return;
-}
-void scale_vector(const AthenaArray<Real> &A , const Real alpha , AthenaArray<Real> &result){
-  for (int i=0; i<=2; ++i) result(i) = A(i)*alpha;
-  return;
-}
 
 /* 
 Simple function to get Cartesian Coordinates
@@ -994,55 +888,6 @@ void get_uniform_box_spacing(const RegionSize box_size, Real *DX, Real *DY, Real
 }
 
 
-/*
-* -------------------------------------------------------------------
-*   Function to read in the initial conditions 
-*     'init_filename' (specified in the athinput.star_wind file).
-* -------------------------------------------------------------------
-*/
-// void read_inits(std::string initfile)
-// {
-//   FILE *input_file;
-//     if ((input_file = fopen(initfile.c_str(), "r")) == NULL)   
-//            fprintf(stderr, "Cannot open %s, %s\n", "input_file",initfile.c_str());
-
-//   fscanf(input_file, "%i %i %i \n", &nx_inits, &ny_inits, &nz_inits);
-
-   
-
-// x_inits.NewAthenaArray(nz_inits,ny_inits,nx_inits);
-// y_inits.NewAthenaArray(nz_inits,ny_inits,nx_inits);
-// z_inits.NewAthenaArray(nz_inits,ny_inits,nx_inits);
-// rho_inits.NewAthenaArray(nz_inits,ny_inits,nx_inits);
-// v1_inits.NewAthenaArray(nz_inits,ny_inits,nx_inits);
-// v2_inits.NewAthenaArray(nz_inits,ny_inits,nx_inits);
-// v3_inits.NewAthenaArray(nz_inits,ny_inits,nx_inits);
-// press_inits.NewAthenaArray(nz_inits,ny_inits,nx_inits);
-
-
-
-// int i,j,k;
-//   for (k=0; k<nx_inits; k++) {
-//   for (j=0; j<ny_inits; j++) {
-//   for (i=0; i<nz_inits; i++) {
-
-// fread( &x_inits(k,j,i), sizeof( Real ), 1, input_file );
-// fread( &y_inits(k,j,i), sizeof( Real ), 1, input_file );
-// fread( &z_inits(k,j,i), sizeof( Real ), 1, input_file );
-// fread( &rho_inits(k,j,i), sizeof( Real ), 1, input_file );
-// fread( &v1_inits(k,j,i), sizeof( Real ), 1, input_file );
-// fread( &v2_inits(k,j,i), sizeof( Real ), 1, input_file );
-// fread( &v3_inits(k,j,i), sizeof( Real ), 1, input_file );
-// fread( &press_inits(k,j,i), sizeof( Real ), 1, input_file );
-
-// r_min_inits = std::min(r_min_inits,std::sqrt(SQR(x_inits(k,j,i)) + SQR(y_inits(k,j,i)) + SQR(z_inits(k,j,i)) ));
-
-// }
-// }
-// }
-//     fclose(input_file);
-//   return;
-// }
 
 void set_boundary_arrays(std::string initfile, const RegionSize block_size, const Coordinates *pcoord, const int is, const int ie, const int js, const int je, const int ks, const int ke,
   AthenaArray<Real> &prim_bound, FaceField &b_bound){
@@ -1278,11 +1123,18 @@ if (MAGNETIC_FIELDS_ENABLED){
               // else{
 
                   if (r<r_cut){
-                    rho = 1e-7;
+
+                    Real dlogr = std::log(x_inits(0,0,1)) - std::log(x_inits(0,0,0)) ;
+                    Real r0 = x_inits(0,0,0);
+
+                    i0 = (int) ((std::log(r_cut) - std::log(r0)) / dlogr + 0.5 + 1000) - 1000;
+                    if (i0<0) i0 = 0;
+                    if (i0>=nx_inits) i0 = nx_inits - 1;
+                    rho = rho_inits(k0,j0,i0);
                     vx = 0;
                     vy = 0;
                     vz = 0;
-                    p = 1e-10;
+                    p = press_inits(k0,j0,i0);
 
                   }
                   else{
@@ -1377,6 +1229,7 @@ if (MAGNETIC_FIELDS_ENABLED){
        v2_inits.DeleteAthenaArray();
        v3_inits.DeleteAthenaArray();
        press_inits.DeleteAthenaArray();
+
 
        if (MAGNETIC_FIELDS_ENABLED){
         A1_inits.DeleteAthenaArray();
@@ -1684,20 +1537,7 @@ void get_ijk(MeshBlock *pmb,const Real x, const Real y, const Real z , int *i, i
    if (pmb->block_size.nx3>1) *k = int ( (z-pmb->block_size.x3min)/dz) + pmb->ks;
 
    if (*k>pmb->ke) *k = pmb->ke;
-   // if ( (x < pmb->pcoord->x1f(*i) ) || (x > pmb->pcoord->x1f(*i+1) ) ||
-   //      (y < pmb->pcoord->x2f(*j) ) || (y > pmb->pcoord->x2f(*j+1) ) ){
-   //        fprintf(stderr,"Error in get_ijk, ijk : %d %d %d outside of cell for xyz: %g %g %g \n",*i,*j,*k,x,y,z);
-   //        fprintf(stderr,"Error in get_ijk, x1_bound : %g %g \n x2_bound : %g %g\n",pmb->pcoord->x1f(*i),pmb->pcoord->x1f(*i+1),pmb->pcoord->x2f(*j),pmb->pcoord->x2f(*j+1));
 
-   //        exit(0);
-   //      }
-
-   //  if (pmb->block_size.nx3>1){
-   //    if ( (z < pmb->pcoord->x3f(*k) ) || (z > pmb->pcoord->x3f(*k+1) ) ){
-   //      fprintf(stderr,"Error in get_ijk, ijk : %d %d %d outside of cell for xyz: %g %g %g",*i,*j,*k,x,y,z);
-   //        exit(0);
-   //    }
-   //  } 
     
 }
 
@@ -1854,7 +1694,7 @@ void Mesh::InitUserMeshData(ParameterInput *pin)
     if(adaptive==true) EnrollUserRefinementCondition(RefinementCondition);
 
      //EnrollUserExplicitSourceFunction(inner_boundary_source_function);
-    //EnrollUserRadSourceFunction(inner_boundary_source_function);
+    EnrollUserRadSourceFunction(inner_boundary_source_function);
     
     int i = 0;
     if (MAGNETIC_FIELDS_ENABLED){
@@ -1936,6 +1776,8 @@ void MeshBlock::InitUserMeshBlockData(ParameterInput *pin){
     // init_cooling_tabs(cooling_file_name);
     // init_cooling();
 
+    // fprintf(stderr,"cs_mas: %g r_in: %g v_ff: %g \n", cs_max,r_inner_boundary,v_ff);
+
   
     
 }
@@ -1980,40 +1822,31 @@ Real DivergenceB(MeshBlock *pmb, int iout)
 }
 
 
-void MeshBlock::UserWorkInSubCycle(void)
-{
-//   int il = is - NGHOST;
-//   int iu = ie + NGHOST;
-//   int jl = js;
-//   int ju = je;
-//   if (block_size.nx2 > 1) {
-//     jl -= (NGHOST);
-//     ju += (NGHOST);
-//   }
-//   int kl = ks;
-//   int ku = ke;
-//   if (block_size.nx3 > 1) {
-//     kl -= (NGHOST);
-//     ku += (NGHOST);
-//   }
-
-
-//       inner_boundary(pcoord->pmy_block, phydro->w1, phydro->w,pscalars );
-//       peos->PrimitiveToConserved(phydro->w, pfield->bcc, phydro->u, pcoord, il, iu, jl, ju, kl, ku);
-//       if (NSCALARS>0) peos->PassiveScalarPrimitiveToConserved(pscalars->r, phydro->u, pscalars->s, pcoord,il, iu, jl, ju, kl, ku);
-
-
-}
-
 
 void MeshBlock::UserWorkInLoop(void)
 {
-
+ Real gamma = gm1+1.;
+  // Real vmax = 0.0;
     for (int k=ks; k<=ke; ++k) {
 #pragma omp parallel for schedule(static)
         for (int j=js; j<=je; ++j) {
 #pragma simd
             for (int i=is; i<=ie; ++i) {
+
+
+                // Real v_s = std::sqrt( gamma * phydro->w(IPR,k,j,i)/phydro->w(IDN,k,j,i) );
+
+                // if (v_s>cs_max) v_s = cs_max;
+                // if ( std::fabs(phydro->w(IVX,k,j,i)) > cs_max) phydro->w(IVX,k,j,i) = cs_max * ( (phydro->w(IVX,k,j,i) >0) - (phydro->w(IVX,k,j,i)<0) ) ;
+                // if ( std::fabs(phydro->w(IVY,k,j,i)) > cs_max) phydro->w(IVY,k,j,i) = cs_max * ( (phydro->w(IVY,k,j,i) >0) - (phydro->w(IVY,k,j,i)<0) ) ;
+                // if ( std::fabs(phydro->w(IVZ,k,j,i)) > cs_max) phydro->w(IVZ,k,j,i) = cs_max * ( (phydro->w(IVZ,k,j,i) >0) - (phydro->w(IVZ,k,j,i)<0) ) ;
+
+                // phydro->w(IPR,k,j,i) = SQR(v_s) *phydro->w(IDN,k,j,i)/gamma ;
+
+
+                // vmax = std::max(vmax,std::fabs(phydro->w(IVX,k,j,i)));
+                // vmax = std::max(vmax,std::fabs(phydro->w(IVY,k,j,i)));
+                // vmax = std::max(vmax,std::fabs(phydro->w(IVZ,k,j,i)));
                 
                 Real x,y,z;
                 
@@ -2095,38 +1928,14 @@ void MeshBlock::UserWorkInLoop(void)
 
                 }
 
+
                 
             }
         }
     }
 
-//   int il = is - NGHOST;
-//   int iu = ie + NGHOST;
-//   int jl = js;
-//   int ju = je;
-//   if (block_size.nx2 > 1) {
-//     jl -= (NGHOST);
-//     ju += (NGHOST);
-//   }
-//   int kl = ks;
-//   int ku = ke;
-//   if (block_size.nx3 > 1) {
-//     kl -= (NGHOST);
-//     ku += (NGHOST);
-//   }
 
-
-// //These should be in usersourcterm
-
-//       //if (NSCALARS>0) electron_update(pcoord, peos, phydro, pfield, pscalars, is, ie, js, je, ks, ke );
-//       if (NSCALARS>0) electron_update(pcoord, peos, phydro->u1, phydro->u,phydro->w1, phydro->w, 
-//         pfield->b1,pfield->b, pscalars->s1,pscalars->s,pscalars->r, is, ie, js, je, ks, ke ) ;
-//   // Create aliases for metric
-//       // inner_boundary(pcoord->pmy_block, phydro->w1, phydro->w,pscalars );
-//       peos->PrimitiveToConserved(phydro->w, pfield->bcc, phydro->u, pcoord, il, iu, jl, ju, kl, ku);
-//       if (NSCALARS>0) peos->PassiveScalarPrimitiveToConserved(pscalars->r, phydro->u, pscalars->s, pcoord,il, iu, jl, ju, kl, ku);
-
-
+    //fprintf(stderr,"vmax in userwork: %g \n",vmax);
 }
 
 /* 
@@ -2136,133 +1945,135 @@ void MeshBlock::UserWorkInLoop(void)
 */
 void MeshBlock::ProblemGenerator(ParameterInput *pin)
 {
-//   int i=0,j=0,k=0;
+  int i=0,j=0,k=0;
 
-//    // Prepare index bounds
-//   int il = is - NGHOST;
-//   int iu = ie + NGHOST;
-//   int jl = js;
-//   int ju = je;
-//   if (block_size.nx2 > 1) {
-//     jl -= (NGHOST);
-//     ju += (NGHOST);
-//   }
-//   int kl = ks;
-//   int ku = ke;
-//   if (block_size.nx3 > 1) {
-//     kl -= (NGHOST);
-//     ku += (NGHOST);
-//   }
+   // Prepare index bounds
+  int il = is - NGHOST;
+  int iu = ie + NGHOST;
+  int jl = js;
+  int ju = je;
+  if (block_size.nx2 > 1) {
+    jl -= (NGHOST);
+    ju += (NGHOST);
+  }
+  int kl = ks;
+  int ku = ke;
+  if (block_size.nx3 > 1) {
+    kl -= (NGHOST);
+    ku += (NGHOST);
+  }
 
-//     std::string init_file_name;
-//     AthenaArray<Real> w_inits;
-//     FaceField b_inits;
+    std::string init_file_name;
+    AthenaArray<Real> w_inits;
+    FaceField b_inits;
 
-//     int ncells1 = block_size.nx1 + 2*(NGHOST);
-//     int ncells2 = 1, ncells3 = 1;
-//     if (block_size.nx2 > 1) ncells2 = block_size.nx2 + 2*(NGHOST);
-//     if (block_size.nx3 > 1) ncells3 = block_size.nx3 + 2*(NGHOST);
-//     w_inits.NewAthenaArray(NHYDRO,ncells3,ncells2,ncells1);
-//     b_inits.x1f.NewAthenaArray( ncells3   , ncells2   ,(ncells1+1));
-//     b_inits.x2f.NewAthenaArray( ncells3   ,(ncells2+1), ncells1   );
-//     b_inits.x3f.NewAthenaArray((ncells3+1), ncells2   , ncells1   );
-//     //divb_array.NewAthenaArray(ncells3,ncells2,ncells1);
-//     init_file_name =  pin->GetOrAddString("problem","init_filename", "inits.in");
+    int ncells1 = block_size.nx1 + 2*(NGHOST);
+    int ncells2 = 1, ncells3 = 1;
+    if (block_size.nx2 > 1) ncells2 = block_size.nx2 + 2*(NGHOST);
+    if (block_size.nx3 > 1) ncells3 = block_size.nx3 + 2*(NGHOST);
+    w_inits.NewAthenaArray(NHYDRO,ncells3,ncells2,ncells1);
+    b_inits.x1f.NewAthenaArray( ncells3   , ncells2   ,(ncells1+1));
+    b_inits.x2f.NewAthenaArray( ncells3   ,(ncells2+1), ncells1   );
+    b_inits.x3f.NewAthenaArray((ncells3+1), ncells2   , ncells1   );
+    //divb_array.NewAthenaArray(ncells3,ncells2,ncells1);
+    init_file_name =  pin->GetOrAddString("problem","init_filename", "inits.in");
 
-//     set_boundary_arrays(init_file_name,block_size,pcoord,is,ie,js,je,ks,ke,w_inits,b_inits);
-//   Real pressure,b0,da,pa,ua,va,wa,bxa,bya,bza,x1,x2;
-//   Real T_dt,T_dmin,T_dmax;
-
-
+    set_boundary_arrays(init_file_name,block_size,pcoord,is,ie,js,je,ks,ke,w_inits,b_inits);
+    Real pressure,b0,da,pa,ua,va,wa,bxa,bya,bza,x1,x2;
+    Real T_dt,T_dmin,T_dmax;
 
 
 
-//   Real gm1 = peos->GetGamma() - 1.0;
-//   /* Set up a uniform medium */
-//   /* For now, make the medium almost totally empty */
-//   da = 1.0e-8;
-//   pa = 1.0e-10;
-//   ua = 0.0;
-//   va = 0.0;
-//   wa = 0.0;
-//   bxa = 1e-4;
-//   bya = 1e-4;
-//   bza = 0.0;
-//   Real x,y,z;
-
-//   for (k=kl; k<=ku; k++) {
-//   for (j=jl; j<=ju; j++) {
-//   for (i=il; i<=iu; i++) {
-
-        
-//         da = w_inits(IDN,k,j,i);
-//         ua = w_inits(IVX,k,j,i);
-//         va = w_inits(IVY,k,j,i);
-//         wa = w_inits(IVZ,k,j,i);
-//         pa = w_inits(IPR,k,j,i);
-
-//         bxa = b_inits.x1f(k,j,i);
-//         bya = b_inits.x2f(k,j,i);
-//         bza = b_inits.x3f(k,j,i);
 
 
-//       phydro->w(IDN,k,j,i) = da;
-//       phydro->w(IVX,k,j,i) = ua;
-//       phydro->w(IVY,k,j,i) = va;
-//       phydro->w(IVZ,k,j,i) = wa;
-//       phydro->w(IPR,k,j,i) = pa;
+    Real gm1 = peos->GetGamma() - 1.0;
+    /* Set up a uniform medium */
+    /* For now, make the medium almost totally empty */
+    da = 1.0e-8;
+    pa = 1.0e-10;
+    ua = 0.0;
+    va = 0.0;
+    wa = 0.0;
+    bxa = 1e-4;
+    bya = 1e-4;
+    bza = 0.0;
+    Real x,y,z;
 
-        
+    for (k=kl; k<=ku; k++) {
+    for (j=jl; j<=ju; j++) {
+    for (i=il; i<=iu; i++) {
 
-//     phydro->u(IDN,k,j,i) = da;
-//     phydro->u(IM1,k,j,i) = da*ua;
-//     phydro->u(IM2,k,j,i) = da*va;
-//     phydro->u(IM3,k,j,i) = da*wa;
+          
+        da = w_inits(IDN,k,j,i);
+        ua = w_inits(IVX,k,j,i);
+        va = w_inits(IVY,k,j,i);
+        wa = w_inits(IVZ,k,j,i);
+        pa = w_inits(IPR,k,j,i);
 
-//     for (int i_user=0;i_user<N_user_vars; i_user ++){
-//       user_out_var(i_user,k,j,i) = 0;
-//     }
-
-// if (MAGNETIC_FIELDS_ENABLED){
-//     pfield->b.x1f(k,j,i) = bxa;
-//     pfield->b.x2f(k,j,i) = bya;
-//     pfield->b.x3f(k,j,i) = bza;
-//     pfield->bcc(IB1,k,j,i) = bxa;
-//     pfield->bcc(IB2,k,j,i) = bya;
-//     pfield->bcc(IB3,k,j,i) = bza;
-//     if (i == ie) pfield->b.x1f(k,j,i+1) = bxa;
-//     if (j == je) pfield->b.x2f(k,j+1,i) = bya;
-//     if (k == ke) pfield->b.x3f(k+1,j,i) = bza;
+        bxa = b_inits.x1f(k,j,i);
+        bya = b_inits.x2f(k,j,i);
+        bza = b_inits.x3f(k,j,i);
 
 
-        
-// }
+        phydro->w(IDN,k,j,i) = da;
+        phydro->w(IVX,k,j,i) = ua;
+        phydro->w(IVY,k,j,i) = va;
+        phydro->w(IVZ,k,j,i) = wa;
+        phydro->w(IPR,k,j,i) = pa;
 
-//     pressure = pa;
-// #ifndef ISOTHERMAL
-//     phydro->u(IEN,k,j,i) = pressure/gm1;
-// if (MAGNETIC_FIELDS_ENABLED){
-//       phydro->u(IEN,k,j,i) +=0.5*(bxa*bxa + bya*bya + bza*bza);
-// }
-//      phydro->u(IEN,k,j,i) += 0.5*da*(ua*ua + va*va + wa*wa);
-// #endif /* ISOTHERMAL */
 
-//       if (RELATIVISTIC_DYNAMICS)  // this should only ever be SR with this file
-//         phydro->u(IEN,k,j,i) += da;
- 
-//   }}}
+
+        phydro->u(IDN,k,j,i) = da;
+        phydro->u(IM1,k,j,i) = da*ua;
+        phydro->u(IM2,k,j,i) = da*va;
+        phydro->u(IM3,k,j,i) = da*wa;
+
+        for (int i_user=0;i_user<N_user_vars; i_user ++){
+          user_out_var(i_user,k,j,i) = 0;
+        }
+
+        if (MAGNETIC_FIELDS_ENABLED){
+            pfield->b.x1f(k,j,i) = bxa;
+            pfield->b.x2f(k,j,i) = bya;
+            pfield->b.x3f(k,j,i) = bza;
+            pfield->bcc(IB1,k,j,i) = bxa;
+            pfield->bcc(IB2,k,j,i) = bya;
+            pfield->bcc(IB3,k,j,i) = bza;
+            if (i == ie) pfield->b.x1f(k,j,i+1) = bxa;
+            if (j == je) pfield->b.x2f(k,j+1,i) = bya;
+            if (k == ke) pfield->b.x3f(k+1,j,i) = bza;
+
+
+
+
+                
+        }
+
+        pressure = pa;
+    #ifndef ISOTHERMAL
+        phydro->u(IEN,k,j,i) = pressure/gm1;
+    if (MAGNETIC_FIELDS_ENABLED){
+          phydro->u(IEN,k,j,i) +=0.5*(bxa*bxa + bya*bya + bza*bza);
+    }
+         phydro->u(IEN,k,j,i) += 0.5*da*(ua*ua + va*va + wa*wa);
+    #endif /* ISOTHERMAL */
+
+          if (RELATIVISTIC_DYNAMICS)  // this should only ever be SR with this file
+            phydro->u(IEN,k,j,i) += da;
+   
+    }}}
+      
+    w_inits.DeleteAthenaArray();
+    b_inits.x1f.DeleteAthenaArray();
+    b_inits.x2f.DeleteAthenaArray();
+    b_inits.x3f.DeleteAthenaArray();
+
+    UserWorkInSubCycle();
+    UserWorkInLoop();
+
+    if (NSCALARS>0) init_electrons(pscalars, phydro, pfield,il, iu, jl, ju, kl, ku);
+
     
-//   w_inits.DeleteAthenaArray();
-//   b_inits.x1f.DeleteAthenaArray();
-//   b_inits.x2f.DeleteAthenaArray();
-//   b_inits.x3f.DeleteAthenaArray();
-
-//   UserWorkInSubCycle();
-//   UserWorkInLoop();
-
-//   if (NSCALARS>0) init_electrons(pscalars, phydro, pfield,il, iu, jl, ju, kl, ku);
-
-  
 
 }
 
