@@ -116,17 +116,17 @@ void HydroSourceTerms::AddHydroSourceTerms(const Real time, const Real dt,
 //  \brief Adds source terms to conserved variables
 
 void HydroSourceTerms::AddRadSourceTerms(const Real time, const Real dt, const AthenaArray<Real> *flux,
-  const AthenaArray<Real> &cons_old,AthenaArray<Real> &cons, 
-  const AthenaArray<Real> &prim_old,AthenaArray<Real> &prim,
-  const FaceField &bb_old,const FaceField &bb,
-  const AthenaArray<Real> &s_old,AthenaArray<Real> &s_scalar,
+  const AthenaArray<Real> &cons_old, const AthenaArray<Real> &cons_half,AthenaArray<Real> &cons, 
+  const AthenaArray<Real> &prim_old, const AthenaArray<Real> &prim_half,AthenaArray<Real> &prim,
+  const FaceField &bb_half,const FaceField &bb,
+ const AthenaArray<Real> &s_old, const AthenaArray<Real> &s_half,AthenaArray<Real> &s_scalar,
   AthenaArray<Real> &r)
 {
   MeshBlock *pmb = pmy_hydro_->pmy_block;
 
   //  user-defined source terms
   if (UserRadSourceTerm != nullptr)
-    UserRadSourceTerm(pmb, time,dt,flux,cons_old,cons,prim_old,prim,bb_old,bb,s_old,s_scalar,r);
+    UserRadSourceTerm(pmb, time,dt,flux,cons_old,cons_half,cons,prim_old,prim_half,prim,bb_half,bb,s_old, s_half,s_scalar,r);
 
 
   return;

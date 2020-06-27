@@ -645,9 +645,12 @@ void TimeIntegratorTaskList::StartupTaskList(MeshBlock *pmb, int stage) {
     // Initialize storage registers
     Hydro *ph = pmb->phydro;
     ph->u1.ZeroClear();
-    if (integrator == "ssprk5_4")
+    if (integrator == "ssprk5_4" || ALLOCATE_U2)
       ph->u2 = ph->u;
 
+    if (ALLOCATE_U2){
+      ph->w2 = ph->w;
+    }
     if (MAGNETIC_FIELDS_ENABLED) { // MHD
       Field *pf = pmb->pfield;
       pf->b1.x1f.ZeroClear();
@@ -664,7 +667,7 @@ void TimeIntegratorTaskList::StartupTaskList(MeshBlock *pmb, int stage) {
     if (NSCALARS > 0) {
       PassiveScalars *ps = pmb->pscalars;
       ps->s1.ZeroClear();
-      if (integrator == "ssprk5_4")
+      if (integrator == "ssprk5_4" || ALLOCATE_U2)
         ps->s2 = ps->s;
     }
   }
@@ -895,10 +898,10 @@ TaskStatus TimeIntegratorTaskList::RadSourceTerms(MeshBlock *pmb, int stage)
     }
 
     ph->hsrc.AddRadSourceTerms(t_start_stage,dt,ph->flux,
-      ph->u1,ph->u,
-      ph->w,ph->w1,
+      ph->u2, ph->u1,ph->u,
+      ph->w2,ph->w,ph->w1,
       pf->b1,pf->b,
-      ps->s1,ps->s,
+      ps->s2, ps->s1, ps->s,
       ps->r);
 
 

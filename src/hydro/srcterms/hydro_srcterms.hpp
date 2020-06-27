@@ -46,10 +46,10 @@ class HydroSourceTerms {
                            const AthenaArray<Real> &b, AthenaArray<Real> &cons,
                            AthenaArray<Real> &cons_scalar);
   void AddRadSourceTerms(const Real time, const Real dt, const AthenaArray<Real> *flux,
-                          const AthenaArray<Real> &cons_old,AthenaArray<Real> &cons, 
-                          const AthenaArray<Real> &prim_old,AthenaArray<Real> &prim,
+                          const AthenaArray<Real> &cons_old, const AthenaArray<Real> &cons_half,AthenaArray<Real> &cons, 
+                          const AthenaArray<Real> &prim_old, const AthenaArray<Real> &prim_half,AthenaArray<Real> &prim,
                           const FaceField &bb_old,const FaceField &bb,
-                          const AthenaArray<Real> &s_old,AthenaArray<Real> &s_scalar,
+                          const AthenaArray<Real> &s_old,const AthenaArray<Real> &s_half,AthenaArray<Real> &s_scalar,
                           AthenaArray<Real> &r);
   void PointMass(const Real dt, const AthenaArray<Real> *flx,const AthenaArray<Real> &p,
                  AthenaArray<Real> &c);
