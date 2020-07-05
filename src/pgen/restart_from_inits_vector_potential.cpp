@@ -47,7 +47,8 @@ void inner_boundary_source_function(MeshBlock *pmb, const Real time, const Real 
   const AthenaArray<Real> &cons_old,const AthenaArray<Real> &cons_half, AthenaArray<Real> &cons,
   const AthenaArray<Real> &prim_old,const AthenaArray<Real> &prim_half,  AthenaArray<Real> &prim, 
   const FaceField &bb_half, const FaceField &bb,
-  const AthenaArray<Real> &s_old,const AthenaArray<Real> &s_half, AthenaArray<Real> &s_scalar, AthenaArray<Real> &prim_scalar);
+  const AthenaArray<Real> &s_old,const AthenaArray<Real> &s_half, AthenaArray<Real> &s_scalar, 
+  const AthenaArray<Real> &r_half, AthenaArray<Real> &prim_scalar);
 static Real Lambda_T(const Real T);
 static Real Yinv(Real Y1);
 static Real Y(const Real T);
@@ -163,7 +164,7 @@ Real r_dump_min,r_dump_max; /* Range in r to sample for radial profile */
 Real yr = 31556926.0, pc = 3.09e18;    /* yr and parsec in code units */
 Real cl = 2.99792458e10 * (1e3 * yr)/pc ;      /* speed of light in code units */
 Real cs_max = cl ; //0.023337031 * cl;  /*sqrt(me/mp) cl....i.e. sound speed of electrons is ~ c */
-
+Real mp_over_me = 1836.15267507;  //proton mass in solar masses
 bool amr_increase_resolution; /* True if resolution is to be increased from restarted run */
 
 // int nx_inits,ny_inits,nz_inits; /* size of initial condition arrays */
@@ -177,16 +178,49 @@ void electron_update(const Real dt, const AthenaArray<Real> *flux,
   const AthenaArray<Real> &prim_old, const AthenaArray<Real> &prim_half, AthenaArray<Real> &prim, 
   const FaceField &bb_half,const FaceField &bb, 
   const AthenaArray<Real> &s_old,const AthenaArray<Real> &s_half, AthenaArray<Real> &s_scalar, 
-  AthenaArray<Real> &r_scalar, int is, int ie, int js, int je, int ks, int ke );
+  const AthenaArray<Real> &r_half, AthenaArray<Real> &r_scalar, int is, int ie, int js, int je, int ks, int ke );
 void init_electrons(PassiveScalars *pscalars, Hydro *phydro, Field *pfield,
   int il, int iu, int jl, int ju, int kl, int ku);
 Real fe_howes_(Real beta, Real sigma, Real Ttot ,Real Te);
 Real fe_werner_(Real beta, Real sigma, Real Ttot ,Real Te);
 Real fe_rowan_(Real beta, Real sigma_w, Real Ttot ,Real Te);
 Real gem1,ge,gamma_adi;
-Real Te_over_Ttot_init = 1.0;
+Real ue_over_ug_init = 1.0;
+Real ue_over_ug_floor = 0.01;
 
 
+Real gamma_rel(Real theta){
+  return (10.0 + 20.0*theta)/(6.0 + 15.0*theta) ;
+}
+//kappa = theta^3/2 * (theta + 2/5)^3/2/rho
+Real kappa_to_ue(Real kappa,Real den, Real gamma_)
+{
+  // return kappa * std::pow(den,gamma_) / (gamma_-1.0);
+
+  //Real kT_e = theta * me cl*cl/
+ // Real p_e = rho k T_e /(mue mp) = rho theta_e/mue * (me/mp) cl**2
+  Real rhoe = den/mp_over_me/mue;
+  Real theta_e = 1.0/5.0 * (std::sqrt(1.0 + 25.0*std::pow(rhoe*kappa,2.0/3.0)) -1.0 );
+  Real pe_ = rhoe * theta_e * SQR(cl); 
+  return pe_ / (gamma_rel(theta_e) - 1.0); 
+}
+Real ue_to_kappa(Real u, Real den,Real gamma_)
+{
+  // return (gamma_-1.0) * u/std::pow(den,gamma_);
+  // rhoe = ne * me
+  // ne = rho/(mue * mp)
+  // rhoe = rho/mue * me/mp
+  Real rhoe = den/mp_over_me/mue;
+  Real urat = u/(rhoe * SQR(cl));
+  Real theta_e = 1.0/30.0 * (-6.0 + 5.0 * urat + std::sqrt(36.0 + 180.0*urat +25.0*SQR(urat)) ) ;
+  return std::pow(theta_e,3.0/2.0) * std::pow( (theta_e + 2.0/5.0),3.0/2.0) / rhoe;
+}
+
+Real kappa_to_thetae(Real kappa,Real den,Real gamma_){
+  Real rhoe = den/mp_over_me/mue;
+  return 1.0/5.0 * (std::sqrt(1.0 + 25.0*std::pow(rhoe*kappa,2.0/3.0)) -1.0 );
+
+}
 void init_electrons(PassiveScalars *pscalars, Hydro *phydro, Field *pfield,
   int il, int iu, int jl, int ju, int kl, int ku){
 
@@ -194,31 +228,19 @@ void init_electrons(PassiveScalars *pscalars, Hydro *phydro, Field *pfield,
     for (int j=jl; j<=ju; ++j) {
       for (int i=il; i<=iu; ++i) {
           // set entropy
+        Real ug = phydro->w(IPR,k,j,i)/gm1;
+        Real press = phydro->w(IPR,k,j,i);
+        Real rho = phydro->w(IDN,k,j,i);
         if (NSCALARS > 0) {
           pscalars->s(0,k,j,i) = 1.0 * phydro->u(IDN,k,j,i) * 
-                                  phydro->w(IPR,k,j,i) / std::pow(phydro->w(IDN,k,j,i),gamma_adi) ; //total
+                                  press / std::pow(rho,gamma_adi) ; //total
           pscalars->r(0,k,j,i) = pscalars->s(0,k,j,i) / phydro->u(IDN,k,j,i);
           pscalars->s1(0,k,j,i) = pscalars->s(0,k,j,i);
         }
-        if (NSCALARS > 1) {
-          pscalars->s(1,k,j,i) = Te_over_Ttot_init * phydro->u(IDN,k,j,i) * 
-                                  phydro->w(IPR,k,j,i) / std::pow(phydro->w(IDN,k,j,i),ge); //electron
-          pscalars->r(1,k,j,i) = pscalars->s(1,k,j,i) / phydro->u(IDN,k,j,i);
-          pscalars->s1(1,k,j,i) = pscalars->s(1,k,j,i);
-
-        }
-        if (NSCALARS > 2) {
-          pscalars->s(2,k,j,i) = Te_over_Ttot_init * phydro->u(IDN,k,j,i) * 
-                                  phydro->w(IPR,k,j,i) / std::pow(phydro->w(IDN,k,j,i),ge); //electron
-          pscalars->r(2,k,j,i) = pscalars->s(2,k,j,i) / phydro->u(IDN,k,j,i);
-          pscalars->s1(2,k,j,i) = pscalars->s(2,k,j,i);
-
-        }
-        if (NSCALARS > 3) {
-          pscalars->s(3,k,j,i) = Te_over_Ttot_init * phydro->u(IDN,k,j,i) * 
-                                  phydro->w(IPR,k,j,i) / std::pow(phydro->w(IDN,k,j,i),ge); //electron
-          pscalars->r(3,k,j,i) = pscalars->s(3,k,j,i) / phydro->u(IDN,k,j,i);
-          pscalars->s1(3,k,j,i) = pscalars->s(3,k,j,i);
+        for (int n=1; n<NSCALARS; ++n) {
+          pscalars->s(n,k,j,i) = phydro->u(IDN,k,j,i) * ue_to_kappa(ue_over_ug_init*ug,rho,ge); //electron
+          pscalars->r(n,k,j,i) = pscalars->s(n,k,j,i) / phydro->u(IDN,k,j,i);
+          pscalars->s1(n,k,j,i) = pscalars->s(n,k,j,i);
 
         }
       }
@@ -290,26 +312,13 @@ Real fe_rowan_(Real beta, Real sigma_w, Real Ttot ,Real Te){
 }
 
 
-Real kappa_to_u(Real kappa,Real den, Real gamma_)
-{
-  return kappa * std::pow(den,gamma_) / (gamma_-1.0);
-
-  //this is rho * theta_e....fix units!!!
-  //return den * 1.0/5.0 * (std::sqrt(1.0 + 25.0*std::pow(den*kappa,2.0/3.0)) -1.0 );
-}
-Real u_to_kappa(Real u, Real den,Real gamma_)
-{
-  return 1.0/(gamma_-1.0) * u/std::pow(den,gamma_);
-
-  // return 
-}
 void electron_update(const Real dt, const AthenaArray<Real> *flux,Coordinates *pcoord, 
   EquationOfState *peos, Field *pfield, PassiveScalars *ps,
   const AthenaArray<Real> &cons_old, const AthenaArray<Real> &cons_half, AthenaArray<Real> &cons,
   const AthenaArray<Real> &prim_old,const AthenaArray<Real> &prim_half, AthenaArray<Real> &prim, 
   const FaceField &bb_half,const FaceField &bb, 
   const AthenaArray<Real> &s_old, const AthenaArray<Real> &s_half, AthenaArray<Real> &s_scalar, 
-  AthenaArray<Real> &r_scalar, 
+  const AthenaArray<Real> &r_half_, AthenaArray<Real> &r_scalar, 
   int is, int ie, int js, int je, int ks, int ke ) {
   // Create aliases for metric
 
@@ -412,33 +421,42 @@ void electron_update(const Real dt, const AthenaArray<Real> *flux,Coordinates *p
 
         //Variables needed for fe
 
+        //P = rho k T/ (mu mp) 
 
         Real beta = 2.0 * ph/(b_sqh + 1e-15);
         Real sigma = b_sqh/(dh);
         Real sigma_w = b_sqh/(dh + gamma_adi/gm1 * ph);
-        Real Ttot = ph/dh;
+
+        Real kbTtot_kev = mu_highT*mp_over_kev * ph/dh;
 
 
-        Real se_old = s_half(1,k,j,i);
-        Real r_old = se_old/cons_half(IDN,k,j,i);
-        Real Te   = r_old * std::pow(dh,ge) / dh;
+        Real se_half = s_half(1,k,j,i);
+        Real r_half = se_half/cons_half(IDN,k,j,i);
+        Real thetae_half = kappa_to_thetae(r_half,dh,ge);
 
-        Real fe_howes = fe_howes_(beta,sigma, Ttot,Te);
+        Real kbTe_kev   = thetae_half * SQR(cl) /mp_over_me * mp_over_kev; 
+
+        Real fe_howes = fe_howes_(beta,sigma, kbTtot_kev,kbTe_kev);
 
         if (NSCALARS>2)
         {
-          se_old = s_half(2,k,j,i);
-          r_old = se_old/cons_half(IDN,k,j,i);
-          Te   = r_old * std::pow(dh,ge) / dh;
+          se_half = s_half(2,k,j,i);
+          r_half = se_half/cons_half(IDN,k,j,i);
+          thetae_half = kappa_to_thetae(r_half,dh,ge);
+
+          kbTe_kev   = thetae_half * SQR(cl) /mp_over_me * mp_over_kev; 
+
         }
-        Real fe_rowan = fe_rowan_(beta,sigma_w,Ttot,Te);
+        Real fe_rowan = fe_rowan_(beta,sigma_w,kbTtot_kev,kbTe_kev);
         if (NSCALARS>3)
         {
-          se_old = s_half(3,k,j,i);
-          r_old = se_old/cons_half(IDN,k,j,i);
-          Te   = r_old * std::pow(dh,ge) / dh;
+          se_half = s_half(3,k,j,i);
+          r_half = se_half/cons_half(IDN,k,j,i);
+          thetae_half = kappa_to_thetae(r_half,dh,ge);
+
+          kbTe_kev   = thetae_half * SQR(cl) /mp_over_me * mp_over_kev; 
         }
-        Real fe_werner = fe_werner_(beta,sigma,Ttot,Te);
+        Real fe_werner = fe_werner_(beta,sigma,kbTtot_kev,kbTe_kev);
         //Real fe = 0.5;
 
         bool fixed = false;
@@ -455,15 +473,15 @@ void electron_update(const Real dt, const AthenaArray<Real> *flux,Coordinates *p
           // pscalars->s(1,k,j,i) = phydro->u(IDN,k,j,i) * pscalars->r(1,k,j,i);
 
 
-          r_scalar(1,k,j,i) = 0.1 * pnew/std::pow(dnew,ge); //pe_old/std::pow(dnew,ge);
+          r_scalar(1,k,j,i) = ue_to_kappa(ue_over_ug_floor*pnew/gm1,dnew,ge); //pe_old/std::pow(dnew,ge);
           s_scalar(1,k,j,i) = cons(IDN,k,j,i) * r_scalar(1,k,j,i);
           if (NSCALARS>2){
-            r_scalar(2,k,j,i) = 0.1 * pnew/std::pow(dnew,ge); //pe_old/std::pow(dnew,ge);
+            r_scalar(2,k,j,i) =ue_to_kappa(ue_over_ug_floor*pnew/gm1,dnew,ge); //pe_old/std::pow(dnew,ge);
             s_scalar(2,k,j,i) = cons(IDN,k,j,i) * r_scalar(2,k,j,i);
           }
           if (NSCALARS>3){
             //Real pe_old = pscalars->s1(3,k,j,i)/phydro->u1(IDN,k,j,i) *std::pow(dh,ge);
-            r_scalar(3,k,j,i) = 0.1 * pnew/std::pow(dnew,ge);
+            r_scalar(3,k,j,i) = ue_to_kappa(ue_over_ug_floor*pnew/gm1,dnew,ge);
             s_scalar(3,k,j,i) = cons(IDN,k,j,i) * r_scalar(3,k,j,i);
           }
         }
@@ -472,27 +490,26 @@ void electron_update(const Real dt, const AthenaArray<Real> *flux,Coordinates *p
           //Sadowski+ 2017 Equation (51)-(52)
           Real fi = cons_old(IDN,k,j,i)/cons(IDN,k,j,i);
 
-          Real uhat = fi * (prim_old(IPR,k,j,i)/gm1);
+          Real uhat = fi * (s_old(0,k,j,i)/prim_old(IDN,k,j,i)) * std::pow(prim(IDN,k,j,i),gamma_adi) /gm1;
 
-          AthenaArray<Real> uhat_;
-          uhat_.NewAthenaArray(NSCALARS);
+          Real uhat_ [6];
 
-          uhat_(0) = uhat;
+          uhat_[0] = uhat;
 
           for (int n=1; n<NSCALARS; n++) {
-             se_old = s_old(n,k,j,i);
-             r_old = se_old/cons_old(IDN,k,j,i);
-             uhat_(n) = fi * (kappa_to_u(r_old,prim_old(IDN,k,j,i),ge));
+             Real se_old = s_old(n,k,j,i);
+             Real r_old = se_old/cons_old(IDN,k,j,i);
+             uhat_[n] = fi * (kappa_to_ue(r_old,prim(IDN,k,j,i),ge));
            }
 
-          for (int dir=X1DIR; k<=X3DIR; ++dir) {
+          for (int dir=X1DIR; dir<=X3DIR; ++dir) {
             Real dxp,dx;
             int ip,jp,kp;
 
             dxp = pcoord->dx1f(i+1) * (dir==X1DIR) + pcoord->dx2f(j+1) * (dir==X2DIR) + pcoord->dx3f(k+1) * (dir==X3DIR);
             dx =  pcoord->dx1f(i)   * (dir==X1DIR) + pcoord->dx2f(j)   * (dir==X2DIR) + pcoord->dx3f(k)   * (dir==X3DIR);
             ip = i + 1 * (dir==X1DIR);
-            jp = i + 1 * (dir==X2DIR);
+            jp = j + 1 * (dir==X2DIR);
             kp = k + 1 * (dir==X3DIR);
 
             Real fp = -flux[dir](IDN,kp,jp,ip)/cons(IDN,k,j,i) * dt / dxp ;
@@ -504,7 +521,7 @@ void electron_update(const Real dt, const AthenaArray<Real> *flux,Coordinates *p
             int i_upwindp,j_upwindp,k_upwindp; 
             if (flux[dir](IDN,kp,jp,ip)<0){
               i_upwindp = i + 1 * (dir==X1DIR);
-              j_upwindp = i + 1 * (dir==X2DIR);
+              j_upwindp = j + 1 * (dir==X2DIR);
               k_upwindp = k + 1 * (dir==X3DIR);
             }
             else{
@@ -521,48 +538,62 @@ void electron_update(const Real dt, const AthenaArray<Real> *flux,Coordinates *p
             }
             else{
               i_upwindm = i - 1 * (dir==X1DIR);
-              j_upwindm = i - 1 * (dir==X2DIR);
+              j_upwindm = j - 1 * (dir==X2DIR);
               k_upwindm = k - 1 * (dir==X3DIR);
             }
 
-            Real rhop = prim(IDN,k_upwindp,j_upwindp,i_upwindp);
-            Real rhom = prim(IDN,k_upwindm,j_upwindm,i_upwindm);
+            //new densities //
+            Real rhop = prim(IDN,k,j,i); //prim(IDN,k_upwindp,j_upwindp,i_upwindp);
+            Real rhom = prim(IDN,k,j,i); //prim(IDN,k_upwindm,j_upwindm,i_upwindm);
 
             for (int n=0; n<NSCALARS; n++) {
-              Real kp = s_half(n,k_upwindp,j_upwindp,i_upwindp)/cons_half(IDN,k_upwindp,j_upwindp,i_upwindp);
-              Real km = s_half(n,k_upwindm,j_upwindm,i_upwindm)/cons_half(IDN,k_upwindm,j_upwindm,i_upwindm);
+              //half or old???
+              Real kappap = s_half(n,k_upwindp,j_upwindp,i_upwindp)/cons_half(IDN,k_upwindp,j_upwindp,i_upwindp);
+              Real kappam = s_half(n,k_upwindm,j_upwindm,i_upwindm)/cons_half(IDN,k_upwindm,j_upwindm,i_upwindm);
 
-              Real uhatp = kappa_to_u(kp,rhop,gamma_adi);
-              Real uhatm = kappa_to_u(km,rhom,gamma_adi);
+              //NOTE: Boundary values not stored in conserved arrays until later in loop, so use old
 
-              uhat_(n) += fp * (uhatp) + fm * (uhatm); 
+              if (i_upwindp>ie || i_upwindp <is || j_upwindp>je || j_upwindp<js || k_upwindp>ke || k_upwindp<ks){
+                kappap = r_half_(n,k_upwindp,j_upwindp,i_upwindp);
+              }
+              if (i_upwindm>ie || i_upwindm <is || j_upwindm>je || j_upwindm<js || k_upwindm>ke || k_upwindm<ks){
+                kappam = r_half_(n,k_upwindm,j_upwindm,i_upwindm);
+              }
+
+              Real uhatp = kappa_to_ue(kappap,rhop,ge);
+              Real uhatm = kappa_to_ue(kappam,rhom,ge);
+
+              if (n==0){
+                uhatp = kappap*std::pow(rhop,gamma_adi)/(gm1);
+                uhatm = kappam*std::pow(rhom,gamma_adi)/(gm1);
+              }
+
+              uhat_[n] += fp * (uhatp) + fm * (uhatm); 
+
+              // if (std::isnan(uhat_[n])){
+              //   fprintf(stderr,"ijk: %d %d %d iup jup kup: %d %d %d \n iupm jupm kupm: %d %d %d \n kp: %g km: %g\n cons_half: %g %g cons_old: %g %g \n",
+              //     i,j,k,i_upwindp,j_upwindp,k_upwindp,i_upwindm,j_upwindm,k_upwindm,kappap,kappam,
+              //     cons_old(IDN,k_upwindp,j_upwindp,i_upwindp),cons_half(IDN,k_upwindm,j_upwindm,i_upwindm), cons_old(IDN,k_upwindp,j_upwindp,i_upwindp),cons_old(IDN,k_upwindm,j_upwindm,i_upwindm));
+              //   exit(0);
+              // }
             } //Nscalars
 
           } //dir
 
-           Real Q = ( (prim(IPR,k,j,i)/gm1) - uhat_(0) )/dt ;
+           Real Q = ( (prim(IPR,k,j,i)/gm1) - uhat_[0] )/dt ;
+           Real fe_[3] = {fe_howes, fe_rowan,fe_werner};
 
 // p ds = p/kappa dkappa = rho^gamma dkappa
 
-          uhat_(1) += fe_howes * Q * dt;
-          r_scalar(1,k,j,i) = u_to_kappa(uhat_(1),prim(IDN,k,j,i),ge);
-          // r_scalar(1,k,j,i) +=  fe_howes * gem1/(gm1) * std::pow(dh,gamma_adi-ge) * (r_actual - r_scalar(0,k,j,i));
-          s_scalar(1,k,j,i) = r_scalar(1,k,j,i) * cons(IDN,k,j,i);
-          if (NSCALARS>2){
-            uhat_(2) += fe_rowan * Q * dt;
-            r_scalar(2,k,j,i) = u_to_kappa(uhat_(2),prim(IDN,k,j,i),ge);
-            // r_scalar(2,k,j,i) +=  fe_rowan * gem1/(gm1) * std::pow(dh,gamma_adi-ge) * (r_actual - r_scalar(0,k,j,i));
-            s_scalar(2,k,j,i) = r_scalar(2,k,j,i) * cons(IDN,k,j,i);
-          }
-          if (NSCALARS>3){
-            uhat_(3) += fe_werner * Q * dt;
-            r_scalar(3,k,j,i) = u_to_kappa(uhat_(3),prim(IDN,k,j,i),ge);
-            // r_scalar(3,k,j,i) +=  fe_werner * gem1/(gm1) * std::pow(dh,gamma_adi-ge) * (r_actual - r_scalar(0,k,j,i));
-            s_scalar(3,k,j,i) = r_scalar(3,k,j,i) * cons(IDN,k,j,i);
+          for (int n=1; n<NSCALARS; n++) {
+            uhat_[n] += fe_[n-1] * Q * dt;
+
+            if (uhat_[n]<ue_over_ug_floor * pnew/gm1)uhat_[n] = ue_over_ug_floor * pnew/gm1;
+            r_scalar(n,k,j,i) = ue_to_kappa(uhat_[n],prim(IDN,k,j,i),ge);
+            // r_scalar(1,k,j,i) +=  fe_howes * gem1/(gm1) * std::pow(dh,gamma_adi-ge) * (r_actual - r_scalar(0,k,j,i));
+            s_scalar(n,k,j,i) = r_scalar(n,k,j,i) * cons(IDN,k,j,i);
           }
 
-
-          uhat_.DeleteAthenaArray();
 
 
         }
@@ -841,7 +872,8 @@ void inner_boundary_source_function(MeshBlock *pmb, const Real time, const Real 
   const AthenaArray<Real> &cons_old,const AthenaArray<Real> &cons_half, AthenaArray<Real> &cons,
   const AthenaArray<Real> &prim_old,const AthenaArray<Real> &prim_half,  AthenaArray<Real> &prim, 
   const FaceField &bb_half,const FaceField &bb,
-  const AthenaArray<Real> &s_old,const AthenaArray<Real> &s_half, AthenaArray<Real> &s_scalar, AthenaArray<Real> &prim_scalar){
+  const AthenaArray<Real> &s_old,const AthenaArray<Real> &s_half, AthenaArray<Real> &s_scalar, 
+  const AthenaArray<Real> &r_half,AthenaArray<Real> &prim_scalar){
   int i, j, k, dk;
   int is, ie, js, je, ks, ke;
 
@@ -855,7 +887,7 @@ void inner_boundary_source_function(MeshBlock *pmb, const Real time, const Real 
 
 
   if (NSCALARS>1 && ALLOCATE_U2) electron_update(dt,flux, pmb->pcoord, pmb->peos, pmb->pfield,pmb->pscalars,
-    cons_old, cons_half, cons, prim_old,prim_half, prim, bb_half,bb, s_old,s_half,s_scalar,prim_scalar, 
+    cons_old, cons_half, cons, prim_old,prim_half, prim, bb_half,bb, s_old,s_half,s_scalar,r_half, prim_scalar, 
     is, ie, js, je, ks, ke ) ;
 
 
@@ -1579,9 +1611,9 @@ void apply_inner_boundary_condition(MeshBlock *pmb,AthenaArray<Real> &prim, Athe
               prim(IDN,k,j,i) = bsq/bsq_rho_ceiling;
 
               if (NSCALARS>0)r_scalar(0,k,j,i) = prim(IPR,k,j,i)/std::pow(prim(IDN,k,j,i),gamma_adi);
-              if (NSCALARS>1)r_scalar(1,k,j,i) = 0.1 * prim(IPR,k,j,i)/std::pow(prim(IDN,k,j,i),ge);
-              if (NSCALARS>2)r_scalar(2,k,j,i) = 0.1 * prim(IPR,k,j,i)/std::pow(prim(IDN,k,j,i),ge);
-              if (NSCALARS>3)r_scalar(3,k,j,i) = 0.1 * prim(IPR,k,j,i)/std::pow(prim(IDN,k,j,i),ge);
+              if (NSCALARS>1)r_scalar(1,k,j,i) = ue_to_kappa(ue_over_ug_floor * prim(IPR,k,j,i)/gm1,prim(IDN,k,j,i),ge);
+              if (NSCALARS>2)r_scalar(2,k,j,i) = ue_to_kappa(ue_over_ug_floor * prim(IPR,k,j,i)/gm1,prim(IDN,k,j,i),ge);
+              if (NSCALARS>3)r_scalar(3,k,j,i) = ue_to_kappa(ue_over_ug_floor * prim(IPR,k,j,i)/gm1,prim(IDN,k,j,i),ge);
               
             
              }

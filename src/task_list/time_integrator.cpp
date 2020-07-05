@@ -892,17 +892,17 @@ TaskStatus TimeIntegratorTaskList::RadSourceTerms(MeshBlock *pmb, int stage)
     pmb->peos->ConservedToPrimitive(ph->u, ph->w, pf->b, ph->w1, pf->bcc,
            pmb->pcoord, is,ie,js,je,ks,ke);
 
-    if (NSCALARS > 0) {
-      pmb->peos->PassiveScalarConservedToPrimitive(ps->s, ph->u, ps->r, ps->r,
-                                                   pmb->pcoord, is, ie, js, je, ks, ke);
-    }
+    // if (NSCALARS > 0) {
+    //   pmb->peos->PassiveScalarConservedToPrimitive(ps->s, ph->u, ps->r, ps->r,
+    //                                                pmb->pcoord, is, ie, js, je, ks, ke);
+    // }
 
     ph->hsrc.AddRadSourceTerms(t_start_stage,dt,ph->flux,
       ph->u2, ph->u1,ph->u,
       ph->w2,ph->w,ph->w1,
       pf->b1,pf->b,
       ps->s2, ps->s1, ps->s,
-      ps->r);
+      ps->r, ps->r);
 
 
 

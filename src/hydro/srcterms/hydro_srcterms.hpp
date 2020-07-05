@@ -50,7 +50,7 @@ class HydroSourceTerms {
                           const AthenaArray<Real> &prim_old, const AthenaArray<Real> &prim_half,AthenaArray<Real> &prim,
                           const FaceField &bb_old,const FaceField &bb,
                           const AthenaArray<Real> &s_old,const AthenaArray<Real> &s_half,AthenaArray<Real> &s_scalar,
-                          AthenaArray<Real> &r);
+                          const AthenaArray<Real> &r_half, AthenaArray<Real> &r);
   void PointMass(const Real dt, const AthenaArray<Real> *flx,const AthenaArray<Real> &p,
                  AthenaArray<Real> &c);
   void ConstantAcceleration(const Real dt, const AthenaArray<Real> *flx,
