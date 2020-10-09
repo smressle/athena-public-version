@@ -185,7 +185,8 @@ Real fe_howes_(Real beta, Real sigma, Real Ttot ,Real Te);
 Real fe_werner_(Real beta, Real sigma, Real Ttot ,Real Te);
 Real fe_rowan_(Real beta, Real sigma_w, Real Ttot ,Real Te);
 Real gem1,ge,gamma_adi;
-Real ue_over_ug_init = 1.0;
+//Real ue_over_ug_init = 1.0;
+Real Te_over_Tg_init = 1.0;
 Real ue_over_ug_floor = 0.01;
 
 
@@ -238,7 +239,10 @@ void init_electrons(PassiveScalars *pscalars, Hydro *phydro, Field *pfield,
           pscalars->s1(0,k,j,i) = pscalars->s(0,k,j,i);
         }
         for (int n=1; n<NSCALARS; ++n) {
-          pscalars->s(n,k,j,i) = phydro->u(IDN,k,j,i) * ue_to_kappa(ue_over_ug_init*ug,rho,ge); //electron
+          Real thetae = mu_highT * press/rho * Te_over_Tg_init * mp_over_me/(SQR(cl));
+          Real rhoe = rho/mp_over_me/mue;
+          Real ue = (rhoe * thetae * SQR(cl))/(gamma_rel(thetae)-1.0); 
+          pscalars->s(n,k,j,i) = phydro->u(IDN,k,j,i) * ue_to_kappa(ue, rho,ge); 
           pscalars->r(n,k,j,i) = pscalars->s(n,k,j,i) / phydro->u(IDN,k,j,i);
           pscalars->s1(n,k,j,i) = pscalars->s(n,k,j,i);
 
@@ -2216,6 +2220,12 @@ void MeshBlock::ProblemGenerator(ParameterInput *pin)
 
     UserWorkInSubCycle();
     UserWorkInLoop();
+
+    pfield->CalculateCellCenteredField(pfield->b, pfield->bcc, pcoord,
+                                   il, iu, jl, ju, ks, ku);
+
+    peos->PrimitiveToConserved(phydro->w, pfield->bcc, phydro->u, pcoord,
+                                  il, iu, jl, ju, ks, ku);
 
     if (NSCALARS>0) init_electrons(pscalars, phydro, pfield,il, iu, jl, ju, kl, ku);
 
