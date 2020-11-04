@@ -111,6 +111,8 @@ Real muH_sun = 1./X_sun;
 
 Real Z = 3.*Z_sun;
 Real mu_highT = 1./(2.*X + 3.*(1.-X-Z)/4. + Z/2.);  //mean molecular weight in proton masses
+
+Real mui= 1.0/(1.0/mu_highT - 1.0/mue);
 bool amr_increase_resolution; /* True if resolution is to be increased from restarted run */
 
 
@@ -308,10 +310,28 @@ void electron_update(const Real dt, const AthenaArray<Real> *flux,Coordinates *p
   pfield->CalculateCellCenteredField(bb_half, bcc1, pcoord, is, ie, js, je, ks, ke);
 
 
+  AthenaArray<Real> x1area,x2area,x3area;
+  AthenaArray<Real> vol,x2areap,x3areap;
+
+
+  x1area.NewAthenaArray(pcoord->pmy_block->ncells1+1);
+  x2area.NewAthenaArray(pcoord->pmy_block->ncells1+1);
+  x3area.NewAthenaArray(pcoord->pmy_block->ncells1+1);
+  x2areap.NewAthenaArray(pcoord->pmy_block->ncells1+1);
+  x3areap.NewAthenaArray(pcoord->pmy_block->ncells1+1);
+  vol.NewAthenaArray(pcoord->pmy_block->ncells1);
+
+
   // Go through all cells
   for (int k=ks; k<=ke; ++k) {
     for (int j=js; j<=je; ++j) {
       if (GENERAL_RELATIVITY) pcoord->CellMetric(k, j, is, ie, g, gi);
+      if (GENERAL_RELATIVITY) pcoord->Face1Area(k, j, is, ie+1, x1area);
+      if (GENERAL_RELATIVITY) pcoord->Face2Area(k, j, is, ie+1, x2area);
+      if (GENERAL_RELATIVITY) pcoord->Face3Area(k, j, is, ie+1, x3area);
+      if (GENERAL_RELATIVITY) pcoord->Face2Area(k, j+1, is, ie+1, x2areap);
+      if (GENERAL_RELATIVITY) pcoord->Face3Area(k+1, j, is, ie+1, x3areap);
+      if (GENERAL_RELATIVITY) pcoord->CellVolume(k,j,is,ie,vol);
       for (int i=is; i<=ie; ++i) {
 
         Real b_sqh;
@@ -385,7 +405,16 @@ void electron_update(const Real dt, const AthenaArray<Real> *flux,Coordinates *p
 
         Real kbTe_kev   = thetae_half /mp_over_me; 
 
-        Real fe_howes = fe_howes_(beta,sigma, kbTtot_kev,kbTe_kev);
+        //p_i = ni Ti ... p_tot = n_tot T_tot -> pi = p_tot  (n_i T_i )/(ntot Ttot)
+
+        Real peh = thetae_half/mp_over_me *dh /mue;
+        Real pih = ph - peh; ///ph * (kbTi_kev/kbTtot_kev) * (mu_highT/mui); 
+        if (pih<0) pih = ph * 0.01; 
+        Real kbTi_kev = pih/dh * mui;
+        Real betai = 2.0 * pih/(b_sqh + 1e-15);
+
+
+        Real fe_howes = fe_howes_(betai,sigma, kbTi_kev,kbTe_kev);
 
         if (NSCALARS>2)
         {
@@ -439,7 +468,7 @@ void electron_update(const Real dt, const AthenaArray<Real> *flux,Coordinates *p
           //Sadowski+ 2017 Equation (51)-(52)
           Real fi = cons_old(IDN,k,j,i)/cons(IDN,k,j,i);
 
-          Real uhat = fi * (s_old(0,k,j,i)/prim_old(IDN,k,j,i)) * std::pow(prim(IDN,k,j,i),gamma_adi) /gm1;
+          Real uhat = fi * (s_old(0,k,j,i)/cons_old(IDN,k,j,i)) * std::pow(prim(IDN,k,j,i),gamma_adi) /gm1;
 
           Real uhat_ [6];
 
@@ -452,17 +481,24 @@ void electron_update(const Real dt, const AthenaArray<Real> *flux,Coordinates *p
            }
 
           for (int dir=X1DIR; dir<=X3DIR; ++dir) {
-            Real dxp,dx;
+            Real area_p,area;
             int ip,jp,kp;
 
-            dxp = pcoord->dx1f(i+1) * (dir==X1DIR) + pcoord->dx2f(j+1) * (dir==X2DIR) + pcoord->dx3f(k+1) * (dir==X3DIR);
-            dx =  pcoord->dx1f(i)   * (dir==X1DIR) + pcoord->dx2f(j)   * (dir==X2DIR) + pcoord->dx3f(k)   * (dir==X3DIR);
+            //dxp = pcoord->dx1f(i+1) * (dir==X1DIR) + pcoord->dx2f(j+1) * (dir==X2DIR) + pcoord->dx3f(k+1) * (dir==X3DIR);
+            //dx =  pcoord->dx1f(i)   * (dir==X1DIR) + pcoord->dx2f(j)   * (dir==X2DIR) + pcoord->dx3f(k)   * (dir==X3DIR);
+            
+            area_p = x1area(i+1) * (dir==X1DIR) + x2areap(i) * (dir==X2DIR) + x3areap(i) * (dir==X3DIR);
+            area = x1area(i) * (dir==X1DIR) + x2area(i) * (dir==X2DIR) + x3area(i) * (dir==X3DIR);
+
             ip = i + 1 * (dir==X1DIR);
             jp = j + 1 * (dir==X2DIR);
             kp = k + 1 * (dir==X3DIR);
 
-            Real fp = -flux[dir](IDN,kp,jp,ip)/cons(IDN,k,j,i) * dt / dxp ;
-            Real fm =  flux[dir](IDN,k ,j ,i )/cons(IDN,k,j,i) * dt / dx  ;
+            // Real fp = -flux[dir](IDN,kp,jp,ip)/cons(IDN,k,j,i) * dt / dxp ;
+            // Real fm =  flux[dir](IDN,k ,j ,i )/cons(IDN,k,j,i) * dt / dx  ;
+
+            Real fp = -flux[dir](IDN,kp,jp,ip)/cons(IDN,k,j,i) * dt * area_p/vol(i) ;
+            Real fm =  flux[dir](IDN,k ,j ,i )/cons(IDN,k,j,i) * dt * area/vol(i)  ;
 
             // Real kp = s_flux[dir](0,kp,jp,ip)/flux[dir](IDN,kp,jp,ip);
             // Real km = s_flux[dir](0,k,j,i)/flux[dir](IDN,k,j,i);
@@ -519,6 +555,15 @@ void electron_update(const Real dt, const AthenaArray<Real> *flux,Coordinates *p
 
               uhat_[n] += fp * (uhatp) + fm * (uhatm); 
 
+
+           if (std::isnan(fe_howes) || std::isnan(uhat_[n]) ) 
+           {
+            fprintf(stderr,"n: %d uhat: %g \n uhatp: %g uhatm: %g, fp : %g fm: %g \n kappap: %g kappam: %g rhop: %g rhom: %g \n ijk: %d %d %d iup jup kup: %d %d %d \n iupm jupm kupm: %d %d %d \n", 
+              n,uhat_[n],uhatp,uhatm,fp,fm,kappap,kappam,rhop,rhom,i,j,k,i_upwindp,j_upwindp,k_upwindp,i_upwindm,j_upwindm,k_upwindm);
+            exit(0);
+          }
+
+
               // if (std::isnan(uhat_[n])){
               //   fprintf(stderr,"ijk: %d %d %d iup jup kup: %d %d %d \n iupm jupm kupm: %d %d %d \n kp: %g km: %g\n cons_half: %g %g cons_old: %g %g \n",
               //     i,j,k,i_upwindp,j_upwindp,k_upwindp,i_upwindm,j_upwindm,k_upwindm,kappap,kappam,
@@ -532,15 +577,17 @@ void electron_update(const Real dt, const AthenaArray<Real> *flux,Coordinates *p
            Real Q = ( (prim(IPR,k,j,i)/gm1) - uhat_[0] )/dt ;
            Real fe_[3] = {fe_howes, fe_rowan,fe_werner};
 
+
 // p ds = p/kappa dkappa = rho^gamma dkappa
 
           for (int n=1; n<NSCALARS; n++) {
-            uhat_[n] += fe_[n-1] * Q * dt;
+            //uhat_[n] += fe_[n-1] * Q * dt;
 
             if (uhat_[n]<ue_over_ug_floor * pnew/gm1)uhat_[n] = ue_over_ug_floor * pnew/gm1;
             r_scalar(n,k,j,i) = ue_to_kappa(uhat_[n],prim(IDN,k,j,i),ge);
             // r_scalar(1,k,j,i) +=  fe_howes * gem1/(gm1) * std::pow(dh,gamma_adi-ge) * (r_actual - r_scalar(0,k,j,i));
             s_scalar(n,k,j,i) = r_scalar(n,k,j,i) * cons(IDN,k,j,i);
+
           }
 
 
@@ -574,6 +621,14 @@ void electron_update(const Real dt, const AthenaArray<Real> *flux,Coordinates *p
   }
 
   if (MAGNETIC_FIELDS_ENABLED) bcc1.DeleteAthenaArray();
+
+
+  x1area.DeleteAthenaArray();
+  x2area.DeleteAthenaArray();
+  x3area.DeleteAthenaArray();
+  x2areap.DeleteAthenaArray();
+  x3areap.DeleteAthenaArray();
+  vol.DeleteAthenaArray();
   return;
 }
 
@@ -659,12 +714,12 @@ void Get_interp_quantities(const Real r,const Real th,const Real ph, const Real 
                     *j0 = ny_inits-2;
                     del[2] = 1.0;
                   }
-                  else if (j0<0){
+                  else if (*j0<0){
                     *j0 = 0;
                     del[2] = 0.0;
                   }
                   else{
-                    del[2] = (th - ((*j0 + 0.5) * dth)) / dth;
+                    del[2] = (th - ((*j0 + 0.5) * dth+th0)) / dth;
                   }
                   //double ph0 = ((k0 + 0.5) * dph);
                   //if (ph0>)
@@ -677,7 +732,7 @@ void Get_interp_quantities(const Real r,const Real th,const Real ph, const Real 
                     del[3]=0.0;
                   }
                   else{
-                    del[3] = (ph - ((*k0 + 0.5) * dph)) / dph;
+                    del[3] = (ph - ((*k0 + 0.5) * dph+ph0)) / dph;
                   }
 
                   coeff[0] = (1. - del[1]) * (1. - del[2]);
@@ -685,6 +740,8 @@ void Get_interp_quantities(const Real r,const Real th,const Real ph, const Real 
                   coeff[2] = del[1] * (1. - del[2]);
                   coeff[3] = del[1] * del[2];
                   coeff[4] = del[3];
+
+                  if (del[2]>1) fprintf(stderr,"del2>1! \n theta: %g j0: %d dth: %g th0: %g\n",th,*j0,dth,th0);
 
                   return;
 
@@ -924,14 +981,50 @@ if (MAGNETIC_FIELDS_ENABLED){
                   p = interp_scalar(press_inits,i0,j0,k0,coeff,nz_inits)/P_unit * scale_fac_pressure;
 
                   if (r<r_min_inits){
-                    rho = 0;
+                    rho = dfloor;
                     vx = 0;
                     vy = 0;
                     vz = 0;
-                    p = 0;
+                    p = pfloor;
+                  
                   }
 
-                  if (rho<0) fprintf(stderr,"del: %g %g %g \n i j k: %d %d %d\n r th phi: %g %g %g\n", del[1],del[2],del[3],i0,j0,k0,r,th,ph);
+                                  //kappa = theta^3/2 * (theta + 2/5)^3/2/rho
+                if (n_electrons>0){
+                    r_scalar1 =  interp_scalar(r_scalar_inits1,i0,j0,k0,coeff,nz_inits) * rho_unit;
+                    if (n_electrons>1) r_scalar2 =  interp_scalar(r_scalar_inits2,i0,j0,k0,coeff,nz_inits) * rho_unit;
+                    if (n_electrons>2) r_scalar3 =  interp_scalar(r_scalar_inits3,i0,j0,k0,coeff,nz_inits) * rho_unit;
+                    if (n_electrons>3) r_scalar4 =  interp_scalar(r_scalar_inits4,i0,j0,k0,coeff,nz_inits) * rho_unit;
+
+
+                    if (r_scalar1<0) {
+                      int k_ = k0%nz_inits;
+                      int kp1_ = (k_+1)%nz_inits;
+                      fprintf(stderr,"negative r_scalar1! \n ijk: %d %d %d i0j0k0: %d %d %d \n r th ph: %g %g %g \n rscalar: %g %g %g %g \n rscalar_kp1: %g %g %g %g \n coeff: %g %g %g %g %g ",
+                        i,j,k,i0,j0,k0,r,th,ph,r_scalar_inits1(k_,j0,i0),
+                        r_scalar_inits1(k_,j0,i0+1),
+                        r_scalar_inits1(k_,j0+1,i0),
+                        r_scalar_inits1(k_,j0+1,i0+1),
+                        r_scalar_inits1(kp1_,j0,i0),
+                        r_scalar_inits1(kp1_,j0+1,i0),
+                        r_scalar_inits1(kp1_,j0,i0+1),
+                        r_scalar_inits1(kp1_,j0+1,i0+1),
+                        coeff[0],coeff[1],coeff[2],coeff[3],coeff[4] );
+                    }
+                    if (r<r_min_inits){
+
+                        if (NSCALARS>1)r_scalar1 = ue_to_kappa(ue_over_ug_floor * pfloor/gm1,dfloor,ge);
+                        if (NSCALARS>2)r_scalar2 = ue_to_kappa(ue_over_ug_floor * pfloor/gm1,dfloor,ge);
+                        if (NSCALARS>3)r_scalar3 = ue_to_kappa(ue_over_ug_floor * pfloor/gm1,dfloor,ge);
+                        if (NSCALARS>4)r_scalar4 = ue_to_kappa(ue_over_ug_floor * pfloor/gm1,dfloor,ge);
+
+                        
+                    }
+                 }
+
+
+
+                  if (rho<0) fprintf(stderr,"rho<!!!\n del: %g %g %g \n i j k: %d %d %d\n r th phi: %g %g %g\n", del[1],del[2],del[3],i0,j0,k0,r,th,ph);
 
                   // if (fabs(vx)>1 || fabs(vy)> 1 || fabs(vz)>1 ){
                   //   fprintf(stderr,"Superluminal speeds!!!! \n vx vy vz: %g %g %g \n r th v_unit: %g %g %g\n",vx,vy,vz,r,th,v_unit);
@@ -1014,14 +1107,6 @@ if (MAGNETIC_FIELDS_ENABLED){
 
                 }
 
-
-                //kappa = theta^3/2 * (theta + 2/5)^3/2/rho
-                if (n_electrons>0){
-                    r_scalar1 =  interp_scalar(r_scalar_inits1,i0,j0,k0,coeff,nz_inits) * rho_unit;
-                    if (n_electrons>1) r_scalar2 =  interp_scalar(r_scalar_inits2,i0,j0,k0,coeff,nz_inits) * rho_unit;
-                    if (n_electrons>2) r_scalar3 =  interp_scalar(r_scalar_inits3,i0,j0,k0,coeff,nz_inits) * rho_unit;
-                    if (n_electrons>3) r_scalar4 =  interp_scalar(r_scalar_inits4,i0,j0,k0,coeff,nz_inits) * rho_unit;
-                 }
 
 
               
@@ -1670,16 +1755,6 @@ if (MAGNETIC_FIELDS_ENABLED){
         
 }
 
-        if (NSCALARS>0){
-          pscalars->r(0,k,j,i) = pa/std::pow(da,gm1+1.0);
-          pscalars->s(0,k,j,i) = pscalars->r(0,k,j,i) * phydro->u(IDN,k,j,i);
-          for (int n=1;n<NSCALARS; n ++){
-            pscalars->r(n,k,j,i) = prim_scalar_inits(n,k,j,i);
-            pscalars->s(n,k,j,i) = pscalars->r(n,k,j,i) * phydro->u(IDN,k,j,i);
-          }
-        }
-
-
   }}}
 
 g.DeleteAthenaArray();
@@ -1713,6 +1788,30 @@ gi.DeleteAthenaArray();
     b_tmp.x1f.DeleteAthenaArray();
     b_tmp.x2f.DeleteAthenaArray();
     b_tmp.x3f.DeleteAthenaArray();
+  }
+
+  for (int k = kl; k <= ku; ++k) {
+    for (int j = jl; j <= ju; ++j) {
+      for (int i = il; i <= iu; ++i) {
+        
+
+          if (NSCALARS>0){
+          pscalars->r(0,k,j,i) = phydro->w(IPR,k,j,i)/std::pow(phydro->w(IDN,k,j,i),gm1+1.0);
+          pscalars->s(0,k,j,i) = pscalars->r(0,k,j,i) * phydro->u(IDN,k,j,i);
+          pscalars->s1(0,k,j,i) = pscalars->s(0,k,j,i);
+
+          for (int n=1;n<NSCALARS; n ++){
+            pscalars->r(n,k,j,i) = prim_scalar_inits(n,k,j,i);
+            pscalars->s(n,k,j,i) = pscalars->r(n,k,j,i) * phydro->u(IDN,k,j,i);
+            pscalars->s1(n,k,j,i) = pscalars->s(n,k,j,i);
+
+            if (pscalars->r(n,k,j,i)<0 || pscalars->s(n,k,j,i)<0 ) 
+              fprintf(stderr,"negative r! \n ijk: %d %d %d rho: %g \n", i,j,k,phydro->u(IDN,k,j,i));
+
+          }
+        }
+      }
+    }
   }
 
   UserWorkInLoop();
