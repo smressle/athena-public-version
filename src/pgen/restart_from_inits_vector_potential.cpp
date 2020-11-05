@@ -93,6 +93,9 @@ Real mu_highT = 0.5;
 Real mu_highT = 1./(2.*X + 3.*(1.-X-Z)/4. + Z/2.);  //mean molecular weight in proton masses
 #endif
 
+Real mui= 1.0/(1.0/mu_highT - 1.0/mue);
+
+
  void emf_source(MeshBlock *pmb,const Real time, const Real dt,const AthenaArray<Real> &prim,  const AthenaArray<Real> &bcc, const AthenaArray<Real> &cons, EdgeField &e);
  void star_update_function(MeshBlock *pmb,const Real time, const Real dt,const AthenaArray<Real> &prim, const AthenaArray<Real> &bcc, AthenaArray<Real> &cons);
  void apply_inner_boundary_condition(MeshBlock *pmb,AthenaArray<Real> &prim,AthenaArray<Real> &r);
@@ -440,7 +443,18 @@ void electron_update(const Real dt, const AthenaArray<Real> *flux,Coordinates *p
 
         Real kbTe_kev   = thetae_half * SQR(cl) /mp_over_me * mp_over_kev; 
 
-        Real fe_howes = fe_howes_(beta,sigma, kbTtot_kev,kbTe_kev);
+
+  // Real rhoe = den/mp_over_me/mue;
+  // Real theta_e = 1.0/5.0 * (std::sqrt(1.0 + 25.0*std::pow(rhoe*kappa,2.0/3.0)) -1.0 );
+  // Real pe_ = rhoe * theta_e * SQR(cl); 
+
+        Real peh = thetae_half/mp_over_me *dh /mue * SQR(cl);
+        Real pih = ph - peh; ///ph * (kbTi_kev/kbTtot_kev) * (mu_highT/mui); 
+        if (pih<0) pih = ph * 0.01; 
+        Real kbTi_kev = pih/dh * mui * mp_over_kev;
+        Real betai = 2.0 * pih/(b_sqh + 1e-15);
+
+        Real fe_howes = fe_howes_(betai,sigma, kbTi_kev,kbTe_kev);
 
         if (NSCALARS>2)
         {
