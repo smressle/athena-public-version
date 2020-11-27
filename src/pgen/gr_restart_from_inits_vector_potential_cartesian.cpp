@@ -581,7 +581,7 @@ void electron_update(const Real dt, const AthenaArray<Real> *flux,Coordinates *p
 // p ds = p/kappa dkappa = rho^gamma dkappa
 
           for (int n=1; n<NSCALARS; n++) {
-            //uhat_[n] += fe_[n-1] * Q * dt;
+            uhat_[n] += fe_[n-1] * Q * dt;
 
             if (uhat_[n]<ue_over_ug_floor * pnew/gm1)uhat_[n] = ue_over_ug_floor * pnew/gm1;
             r_scalar(n,k,j,i) = ue_to_kappa(uhat_[n],prim(IDN,k,j,i),ge);
