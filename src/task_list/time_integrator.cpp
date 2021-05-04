@@ -262,9 +262,9 @@ TimeIntegratorTaskList::TimeIntegratorTaskList(ParameterInput *pin, Mesh *pm) {
       AddTask(INT_HYD, CALC_HYDFLX);
     }
     if (NSCALARS > 0) {
-      AddTask(SRCTERM_HYD,INT_HYD|INT_SCLR);
+      AddTask(SRCTERM_HYD,INT_HYD|INT_SCLR|STAR_UPDATE);
     } else {
-      AddTask(SRCTERM_HYD,INT_HYD);
+      AddTask(SRCTERM_HYD,INT_HYD|STAR_UPDATE);
     }
     if (MAGNETIC_FIELDS_ENABLED){
 
@@ -274,6 +274,7 @@ TimeIntegratorTaskList::TimeIntegratorTaskList(ParameterInput *pin, Mesh *pm) {
     }
     AddTask(SEND_HYD,SRCTERM_RAD);
     AddTask(RECV_HYD,NONE);
+    AddTask(STAR_UPDATE,NONE);
     AddTask(SETB_HYD,(RECV_HYD|SRCTERM_RAD));
     if (SHEARING_BOX) { // Shearingbox BC for Hydro
       AddTask(SEND_HYDSH,SETB_HYD);
@@ -461,7 +462,11 @@ void TimeIntegratorTaskList::AddTask(const TaskID& id, const TaskID& dep) {
       task_list_[ntasks].TaskFunc=
         static_cast<enum TaskStatus (TaskList::*)(MeshBlock*,int)>
         (&TimeIntegratorTaskList::RadSourceTerms);
-  } else if (id == SEND_HYD) {
+  } else if (id == STAR_UPDATE){
+      task_list_[ntasks].TaskFunc=
+        static_cast<enum TaskStatus (TaskList::*)(MeshBlock*,int)>
+        (&TimeIntegratorTaskList::StarUpdate);
+   } else if (id == SEND_HYD) {
     task_list_[ntasks].TaskFunc=
         static_cast<TaskStatus (TaskList::*)(MeshBlock*,int)>
         (&TimeIntegratorTaskList::SendHydro);
@@ -912,6 +917,32 @@ TaskStatus TimeIntegratorTaskList::RadSourceTerms(MeshBlock *pmb, int stage)
 
      
   } else {
+    return TaskStatus::fail;
+  }
+
+  return TaskStatus::next;
+}
+
+enum TaskStatus TimeIntegratorTaskList::StarUpdate(MeshBlock *pmb, int stage)
+{
+  Hydro *ph=pmb->phydro;
+  Field *pf=pmb->pfield;
+  PassiveScalars *ps = pmb->pscalars;
+
+  // return if there are no source terms to be added
+  if (ph->hsrc.star_update_defined == false) return TaskStatus::next;
+
+  // *** this must be changed for the RK3 integrator
+  if (stage <= nstages) {
+    // Time at beginning of stage for u()
+    Real t_start_stage = pmb->pmy_mesh->time + pmb->stage_abscissae[stage-1][0];
+    // Scaled coefficient for RHS update
+    Real dt = (stage_wghts[(stage-1)].beta)*(pmb->pmy_mesh->dt);
+
+    ph->hsrc.DoStarUpdate(t_start_stage, dt, ph->flux, ph->w, ps->r, pf->bcc,
+        ph->u, ps->s);
+  } 
+  else {
     return TaskStatus::fail;
   }
 

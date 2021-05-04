@@ -304,6 +304,7 @@ class Mesh {
   BValFunc BoundaryFunction_[6];
   AMRFlagFunc AMRFlag_;
   SrcTermFunc UserSourceTerm_;
+  SrcTermFunc StarUpdateFunction_;
   RadSrcTermFunc UserRadSourceTerm_;
 
   TimeStepFunc UserTimeStep_;
@@ -357,6 +358,7 @@ class Mesh {
   void EnrollUserRefinementCondition(AMRFlagFunc amrflag);
   void EnrollUserMeshGenerator(CoordinateDirection dir, MeshGenFunc my_mg);
   void EnrollUserExplicitSourceFunction(SrcTermFunc my_func);
+  void EnrollUserStarUpdateFunction(SrcTermFunc my_func);
   void EnrollUserRadSourceFunction(RadSrcTermFunc my_func);
 
   void EnrollUserTimeStepFunction(TimeStepFunc my_func);

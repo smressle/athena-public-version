@@ -37,7 +37,7 @@ class HydroSourceTerms {
   // data
   bool hydro_sourceterms_defined;
   bool rad_sourceterms_defined;
-
+  bool star_update_defined;
 
   // functions
   void AddHydroSourceTerms(const Real time, const Real dt, const AthenaArray<Real> *flx,
@@ -51,6 +51,12 @@ class HydroSourceTerms {
                           const FaceField &bb_old,const FaceField &bb,
                           const AthenaArray<Real> &s_old,const AthenaArray<Real> &s_half,AthenaArray<Real> &s_scalar,
                           const AthenaArray<Real> &r_half, AthenaArray<Real> &r);
+
+  void DoStarUpdate(const Real time, const Real dt, const AthenaArray<Real> *flx,
+                           const AthenaArray<Real> &prim,
+                           const AthenaArray<Real> &prim_scalar,
+                           const AthenaArray<Real> &b, AthenaArray<Real> &cons,
+                           AthenaArray<Real> &cons_scalar);
   void PointMass(const Real dt, const AthenaArray<Real> *flx,const AthenaArray<Real> &p,
                  AthenaArray<Real> &c);
   void ConstantAcceleration(const Real dt, const AthenaArray<Real> *flx,
@@ -63,9 +69,11 @@ class HydroSourceTerms {
   void SelfGravity(const Real dt, const AthenaArray<Real> *flx,
                    const AthenaArray<Real> &p, AthenaArray<Real> &c);
   void EnrollSrcTermFunction(SrcTermFunc my_func);
+  void EnrollStarUpdateFunction(SrcTermFunc my_func);
   void EnrollRadSrcTermFunction(RadSrcTermFunc my_Func);
 
   SrcTermFunc UserSourceTerm;
+  SrcTermFunc StarUpdateFunction;
   RadSrcTermFunc UserRadSourceTerm;
 
 

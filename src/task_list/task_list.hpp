@@ -185,6 +185,8 @@ class TimeIntegratorTaskList : public TaskList {
   TaskStatus ReceiveScalars(MeshBlock *pmb, int stage);
   TaskStatus SetBoundariesScalars(MeshBlock *pmb, int stage);
 
+  TaskStatus StarUpdate(MeshBlock *pmb, int stage);
+
  private:
   IntegratorWeight stage_wghts[MAX_NSTAGE];
 
@@ -294,6 +296,8 @@ const TaskID SEND_SCLR(53);
 const TaskID RECV_SCLR(54);
 const TaskID SETB_SCLR(55);
 const TaskID DIFFUSE_SCLR(56);
+
+const TaskID STAR_UPDATE(57);
 
 // const TaskID RECV_SCLRSH(57);
 // const TaskID SEND_SCLRSH(58);
